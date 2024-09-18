@@ -17,9 +17,9 @@ getResult (Result _ a) f = f a
 getResult _ _            = ""
 
 -- Magic code to convert key, value pairs to JSON to send back to the server
-jsonResponse :: Show a => [(String, a)] -> ActionM ()
+jsonResponse :: [(String, String)] -> ActionM ()
 jsonResponse pairs =
-  json $ object [fromString key .= ((pack $ show value) :: Text) | (key, value) <- pairs]
+  json $ object [fromString key .= ((pack value) :: Text) | (key, value) <- pairs]
 
 
 main :: IO ()

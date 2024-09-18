@@ -79,6 +79,7 @@ library:
     # Make all warnings errors...
     - -Werror
     # ...except some warnings
+    - -Wwarn=missing-export-lists # this makes it easier to test code in ghci by not specifying an export list
     - -Wwarn=name-shadowing
     - -Wwarn=unused-imports
     - -Wwarn=unused-top-binds

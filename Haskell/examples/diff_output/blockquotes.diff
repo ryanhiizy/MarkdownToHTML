@@ -1,8 +1,8 @@
 diff --git a/examples/expected_output/blockquotes.html b/examples/output/blockquotes.html
-index 48155b1f..dfaca94c 100644
+index 02666f27..dfaca94c 100644
 --- a/examples/expected_output/blockquotes.html
 +++ b/examples/output/blockquotes.html
-@@ -1,18 +1 @@
+@@ -1,16 +1 @@
 -<!DOCTYPE html>
 -<html lang="en">
 -
@@ -14,8 +14,6 @@ index 48155b1f..dfaca94c 100644
 -<body>
 -    <blockquote>
 -        <p>This is a block quote.</p>
--    </blockquote>
--    <blockquote>
 -        <p>It can <strong>span</strong> multiple lines.</p>
 -    </blockquote>
 -</body>
