@@ -1,16 +1,26 @@
 diff --git a/examples/expected_output/heading.html b/examples/output/heading.html
-index a2d6b22c..dfaca94c 100644
+index a2d6b22..fa8fbe4 100644
 --- a/examples/expected_output/heading.html
 +++ b/examples/output/heading.html
-@@ -1,21 +1 @@
+@@ -1,21 +1,13 @@
 -<!DOCTYPE html>
 -<html lang="en">
--
++# Heading 1
++## Heading 2
++### Heading 3
++#### Heading 4
++##### Heading 5
++###### Heading 6
+ 
 -<head>
 -    <meta charset="UTF-8">
 -    <title>Test</title>
 -</head>
--
++Alternative Heading 1
++======
++Heading level 2
++---------------
+ 
 -<body>
 -    <h1>Heading 1</h1>
 -    <h2>Heading 2</h2>
@@ -24,5 +34,4 @@ index a2d6b22c..dfaca94c 100644
 -</body>
 -
 -</html>
-+IMPLEMENT_THIS
-\ No newline at end of file
++# **Bolded Heading 1**

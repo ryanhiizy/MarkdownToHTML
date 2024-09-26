@@ -1,8 +1,8 @@
 {-# LANGUAGE InstanceSigs #-}
 
-module Instances (ParseResult (Result, Error), Parser (..), readInt, ParseError(..), isErrorResult) where
+module Instances (ParseResult (Result, Error), Parser (..), readInt, ParseError (..), isErrorResult) where
 
-import           Control.Applicative (Alternative (..))
+import Control.Applicative (Alternative (..))
 
 -- $setup
 -- >>> let p = \n -> Parser (\x -> Result x n)
@@ -26,7 +26,7 @@ newtype Parser a = Parser {parse :: Input -> ParseResult a}
 
 -- Result Instances
 
-instance Show a => Show (ParseResult a) where
+instance (Show a) => Show (ParseResult a) where
   show :: ParseResult a -> String
   show (Result i a) = "Result >" ++ i ++ "< " ++ show a
   show (Error UnexpectedEof) = "Unexpected end of stream"
@@ -38,7 +38,7 @@ instance Show a => Show (ParseResult a) where
 instance Functor ParseResult where
   fmap :: (a -> b) -> ParseResult a -> ParseResult b
   fmap f (Result i a) = Result i (f a)
-  fmap _ (Error e)    = Error e
+  fmap _ (Error e) = Error e
 
 -- Parser Instances
 
@@ -63,7 +63,7 @@ instance Monad Parser where
   (>>=) :: Parser a -> (a -> Parser b) -> Parser b
   (>>=) (Parser p) f = Parser $ \i -> case p i of
     Result rest x -> parse (f x) rest
-    Error e       -> Error e
+    Error e -> Error e
 
 -- |
 --
@@ -107,15 +107,15 @@ instance Alternative Parser where
   (<|>) :: Parser a -> Parser a -> Parser a
   (<|>) pa pb = Parser $ \x -> case parse pa x of
     Error _ -> parse pb x
-    r       -> r
+    r -> r
 
 -- Support functions
 
 isErrorResult :: ParseResult a -> Bool
 isErrorResult (Error _) = True
-isErrorResult _         = False
+isErrorResult _ = False
 
 readInt :: String -> Maybe (Int, String)
 readInt s = case reads s of
   [(x, rest)] -> Just (x, rest)
-  _           -> Nothing
+  _ -> Nothing

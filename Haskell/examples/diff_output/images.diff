@@ -1,5 +1,5 @@
 diff --git a/examples/expected_output/images.html b/examples/output/images.html
-index 1e9c5189..dfaca94c 100644
+index 1e9c518..ec890e4 100644
 --- a/examples/expected_output/images.html
 +++ b/examples/output/images.html
 @@ -1,13 +1 @@
@@ -16,5 +16,4 @@ index 1e9c5189..dfaca94c 100644
 -</body>
 -
 -</html>
-+IMPLEMENT_THIS
-\ No newline at end of file
++![Alt Text](image.png "Caption Text")

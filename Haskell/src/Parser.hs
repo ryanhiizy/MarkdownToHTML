@@ -3,15 +3,25 @@
 -- | Implementation of a parser-combinator.
 module Parser where
 
-import           Control.Applicative
-import           Data.Char           (isAlpha, isDigit, isLower, isSpace,
-                                      isUpper)
-import           Instances           (ParseError (..), ParseResult (..),
-                                      Parser (..), readInt)
+import Control.Applicative
+import Control.Monad (guard)
+import Data.Char
+  ( isAlpha,
+    isDigit,
+    isLower,
+    isSpace,
+    isUpper,
+  )
+import Data.List (isPrefixOf)
+import Instances
+  ( ParseError (..),
+    ParseResult (..),
+    Parser (..),
+    readInt,
+  )
 
 -- $setup
 -- >>> import Instances (isErrorResult, parse)
-
 
 -- | -------------------------------------------------
 -- | --------------- Core parsers --------------------
@@ -40,7 +50,7 @@ unexpectedCharParser = Parser . const . Error . UnexpectedChar
 char :: Parser Char
 char = Parser f
   where
-    f ""       = Error UnexpectedEof
+    f "" = Error UnexpectedEof
     f (x : xs) = Result xs x
 
 -- | Parse numbers as int until non-digit
@@ -60,7 +70,7 @@ int = Parser f
     f "" = Error UnexpectedEof
     f x = case readInt x of
       Just (v, rest) -> Result rest v
-      Nothing        -> Error $ UnexpectedChar (head x)
+      Nothing -> Error $ UnexpectedChar (head x)
 
 -- | Write a parser that asserts that there is no remaining input.
 --
@@ -73,7 +83,7 @@ eof :: Parser ()
 eof = Parser f
   where
     f "" = Result "" ()
-    f x  = Error $ ExpectedEof x
+    f x = Error $ ExpectedEof x
 
 -- | -------------------------------------------------
 -- | --------------- Satisfy parsers -----------------
@@ -236,7 +246,6 @@ spaces = many space
 spaces1 :: Parser String
 spaces1 = some space
 
-
 -- | Write a parser that will parse zero or more spaces (not including newlines)
 --
 -- The possible whitespace characters: \t, \r, \f, \v, and a space character.
@@ -319,3 +328,152 @@ commaTok = charTok ','
 -- True
 stringTok :: String -> Parser String
 stringTok = tok . string
+
+----------------------------
+---- ADDITIONAL PARSERS ----
+----------------------------
+
+-- withoutAny :: [String] -> Parser String
+-- withoutAny tags = Parser f
+--   where
+--     f "" = Error UnexpectedEof
+--     f input@(x : xs) = case find (`isPrefixOf` input) tags of
+--       Just tag
+--         | (tag ++ tag) `isPrefixOf` input ->
+--             let res = drop (length tag) input
+--              in Result res tag
+--         | tag `isPrefixOf` input && tag `isInfixOf` drop (length tag) input ->
+--             Error $ UnexpectedString "Tag found"
+--       _ -> Result xs [x]
+
+-- withoutAny :: [String] -> Parser String
+-- withoutAny tags = Parser f
+--   where
+--     f "" = Error UnexpectedEof
+--     f input@(x : xs)
+--       -- If a tag is found, stop and return the current result
+--       | any (`isPrefixOf` input) tags = Result input ""
+--       -- Otherwise, consume one character and continue
+--       | otherwise =
+--           let Parser g = withoutAny tags
+--            in case g xs of
+--                 Result rest res -> Result rest (x : res)
+--                 Error err -> Error err
+
+-- between :: String -> Parser String
+-- between tag = do
+--   -- Consume the opening tag
+--   _ <- string tag
+--   -- Parse the content, ensuring it’s not empty
+--   content <- withoutAny [tag]
+--   -- Fail if no content is found, i.e., it's empty
+--   if null content
+--     then failed $ UnexpectedString "Empty content between tags"
+--     else do
+--       -- Try to parse the closing tag
+--       _ <- string tag
+--       return content
+
+-- between :: String -> Parser String
+-- between tag = do
+--   -- Consume the opening tag
+--   _ <- string tag
+--   -- Parse the content between the tags
+--   content <- some (withoutAny [tag])
+--   -- Consume the closing tag
+--   _ <- string tag
+--   return content
+
+-- without :: String -> Parser Char
+-- without tag = Parser f
+--   where
+--     f "" = Error UnexpectedEof
+--     f input@(x : xs)
+--       | tag `isPrefixOf` input = Error $ UnexpectedString "Tag found"
+--       | otherwise = Result xs x
+
+-- withoutAny :: [String] -> Parser Char
+-- withoutAny tags = Parser f
+--   where
+--     f "" = Error UnexpectedEof
+--     f input@(x : xs)
+--       | any ((`isPrefixOf` input) . join (++)) tags = Result xs x
+--       -- \tag -> tag `isPrefixOf` input && tag `isInfixOf` drop (length tag) input
+--       | any (liftA2 (&&) (`isPrefixOf` input) (((`drop` input) . length) <**> isInfixOf)) tags =
+--           Error $ UnexpectedString "Tag found"
+--       | otherwise = Result xs x
+
+-- | Produces a parser that always fails with 'UnexpectedChar' using the given
+-- character.
+
+-- -- Parse any character that isn't the start of any given tags
+-- withoutAny :: [String] -> [Char] -> Parser Char
+-- withoutAny tags starts = Parser f
+--   where
+--     f "" = Error UnexpectedEof
+--     f input@(x : xs)
+--       | x `elem` starts = Error $ UnexpectedString "Start found"
+--       | any ((`isPrefixOf` input) . join (++)) tags = Result xs x
+--       | isPrefixAndInfix input tags = Error $ UnexpectedString "Tag found"
+--       | otherwise = Result xs x
+
+-- -- Utility function to check if any string in a list is both a prefix and infix of the input
+-- isPrefixAndInfix :: String -> [String] -> Bool
+-- isPrefixAndInfix input = any (liftA2 (&&) (`isPrefixOf` input) (((`drop` input) . length) <**> isInfixOf))
+
+unexpectedStringParser :: String -> Parser a
+unexpectedStringParser = Parser . const . Error . UnexpectedString
+
+-- Parser that fails if leading spaces (inline) are found
+noLeadingSpaces :: Parser String
+noLeadingSpaces = do
+  whitespace <- inlineSpace
+  guard (null whitespace) <|> unexpectedStringParser "Expected no leading spaces"
+  return ""
+
+-- Parser that parses a positive integer
+positiveInt :: Parser Int
+positiveInt = do
+  n <- int
+  guard (n > 0) <|> unexpectedStringParser "Expected a positive integer"
+  return n
+
+-- Parse any character that isn't the given tag
+without :: String -> Parser Char
+without tag = Parser f
+  where
+    f "" = Error UnexpectedEof
+    f input@(x : xs)
+      | tag `isPrefixOf` input = Error $ UnexpectedString "Tag found"
+      | otherwise = Result xs x
+
+between' :: String -> Parser String
+between' tag = Parser f
+  where
+    f "" = Error UnexpectedEof
+    f input = case parse (string tag) input of
+      Result xs x
+        | head xs == head tag -> Error $ UnexpectedString "Tag found"
+        | otherwise -> Result xs x
+      Error e -> Error e
+
+between :: String -> Parser String
+between tag = between' tag *> some (without tag) <* string tag
+
+anyChar :: Parser Char
+anyChar = Parser f
+  where
+    f "" = Error UnexpectedEof
+    f (x : xs) = Result xs x
+
+headingSepLength :: Parser Int
+headingSepLength = do
+  seps <- some (is '=') <|> some (is '-')
+  guard (length seps >= 2) <|> unexpectedStringParser seps
+  return $ if head seps == '=' then 1 else 2
+
+hashLength :: Parser Int
+hashLength = do
+  hashes <- some (is '#')
+  guard (length hashes <= 6) <|> unexpectedStringParser hashes
+  return $ length hashes
