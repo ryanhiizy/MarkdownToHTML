@@ -4,7 +4,7 @@
 module Parser where
 
 import Control.Applicative
-import Control.Monad (guard)
+import Control.Monad (ap, guard, replicateM)
 import Data.Char
   ( isAlpha,
     isDigit,
@@ -12,7 +12,7 @@ import Data.Char
     isSpace,
     isUpper,
   )
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, isSuffixOf)
 import Instances
   ( ParseError (..),
     ParseResult (..),
@@ -333,147 +333,82 @@ stringTok = tok . string
 ---- ADDITIONAL PARSERS ----
 ----------------------------
 
--- withoutAny :: [String] -> Parser String
--- withoutAny tags = Parser f
---   where
---     f "" = Error UnexpectedEof
---     f input@(x : xs) = case find (`isPrefixOf` input) tags of
---       Just tag
---         | (tag ++ tag) `isPrefixOf` input ->
---             let res = drop (length tag) input
---              in Result res tag
---         | tag `isPrefixOf` input && tag `isInfixOf` drop (length tag) input ->
---             Error $ UnexpectedString "Tag found"
---       _ -> Result xs [x]
-
--- withoutAny :: [String] -> Parser String
--- withoutAny tags = Parser f
---   where
---     f "" = Error UnexpectedEof
---     f input@(x : xs)
---       -- If a tag is found, stop and return the current result
---       | any (`isPrefixOf` input) tags = Result input ""
---       -- Otherwise, consume one character and continue
---       | otherwise =
---           let Parser g = withoutAny tags
---            in case g xs of
---                 Result rest res -> Result rest (x : res)
---                 Error err -> Error err
-
--- between :: String -> Parser String
--- between tag = do
---   -- Consume the opening tag
---   _ <- string tag
---   -- Parse the content, ensuring it’s not empty
---   content <- withoutAny [tag]
---   -- Fail if no content is found, i.e., it's empty
---   if null content
---     then failed $ UnexpectedString "Empty content between tags"
---     else do
---       -- Try to parse the closing tag
---       _ <- string tag
---       return content
-
--- between :: String -> Parser String
--- between tag = do
---   -- Consume the opening tag
---   _ <- string tag
---   -- Parse the content between the tags
---   content <- some (withoutAny [tag])
---   -- Consume the closing tag
---   _ <- string tag
---   return content
-
--- without :: String -> Parser Char
--- without tag = Parser f
---   where
---     f "" = Error UnexpectedEof
---     f input@(x : xs)
---       | tag `isPrefixOf` input = Error $ UnexpectedString "Tag found"
---       | otherwise = Result xs x
-
--- withoutAny :: [String] -> Parser Char
--- withoutAny tags = Parser f
---   where
---     f "" = Error UnexpectedEof
---     f input@(x : xs)
---       | any ((`isPrefixOf` input) . join (++)) tags = Result xs x
---       -- \tag -> tag `isPrefixOf` input && tag `isInfixOf` drop (length tag) input
---       | any (liftA2 (&&) (`isPrefixOf` input) (((`drop` input) . length) <**> isInfixOf)) tags =
---           Error $ UnexpectedString "Tag found"
---       | otherwise = Result xs x
-
--- | Produces a parser that always fails with 'UnexpectedChar' using the given
--- character.
-
--- -- Parse any character that isn't the start of any given tags
--- withoutAny :: [String] -> [Char] -> Parser Char
--- withoutAny tags starts = Parser f
---   where
---     f "" = Error UnexpectedEof
---     f input@(x : xs)
---       | x `elem` starts = Error $ UnexpectedString "Start found"
---       | any ((`isPrefixOf` input) . join (++)) tags = Result xs x
---       | isPrefixAndInfix input tags = Error $ UnexpectedString "Tag found"
---       | otherwise = Result xs x
-
--- -- Utility function to check if any string in a list is both a prefix and infix of the input
--- isPrefixAndInfix :: String -> [String] -> Bool
--- isPrefixAndInfix input = any (liftA2 (&&) (`isPrefixOf` input) (((`drop` input) . length) <**> isInfixOf))
-
 unexpectedStringParser :: String -> Parser a
 unexpectedStringParser = Parser . const . Error . UnexpectedString
 
--- Parser that fails if leading spaces (inline) are found
-noLeadingSpaces :: Parser String
-noLeadingSpaces = do
-  whitespace <- inlineSpace
-  guard (null whitespace) <|> unexpectedStringParser "Expected no leading spaces"
-  return ""
+untilChar :: Char -> Parser String
+untilChar = some . isNot
 
--- Parser that parses a positive integer
-positiveInt :: Parser Int
-positiveInt = do
+untilIncludingChar :: Char -> Parser String
+untilIncludingChar c = untilChar c <* is c
+
+untilIncludingCharTok :: Char -> Parser String
+untilIncludingCharTok c = untilChar c <* charTok c
+
+lookAhead :: Parser a -> Parser a
+lookAhead (Parser p) = Parser f
+  where
+    f input = case p input of
+      Result _ c -> Result input c
+      Error e -> Error e
+
+isNotWhitespace :: Parser Char
+isNotWhitespace = lookAhead (satisfy (not . isSpace))
+
+-- parseCharNTimes n c = traverse (const (is c)) [1 .. n]
+parseCharNTimes :: Int -> Char -> Parser String
+parseCharNTimes n = replicateM n . is
+
+-- noLeadingSpaces :: Parser String
+-- noLeadingSpaces = do
+--   whitespace <- inlineSpace
+--   guard (null whitespace) <|> unexpectedStringParser ("Expected no leading spaces: " ++ whitespace)
+--   return whitespace
+
+isPositiveInt :: Parser Int
+isPositiveInt = do
   n <- int
-  guard (n > 0) <|> unexpectedStringParser "Expected a positive integer"
+  guard (n > 0) <|> unexpectedStringParser ("Expected a positive integer: " ++ show n)
   return n
 
--- Parse any character that isn't the given tag
-without :: String -> Parser Char
-without tag = Parser f
+isNotString :: String -> Parser Char
+isNotString tag = Parser f
   where
     f "" = Error UnexpectedEof
     f input@(x : xs)
-      | tag `isPrefixOf` input = Error $ UnexpectedString "Tag found"
+      | tag `isPrefixOf` input = Error $ UnexpectedString "Closing tag found"
       | otherwise = Result xs x
 
-between' :: String -> Parser String
-between' tag = Parser f
-  where
-    f "" = Error UnexpectedEof
-    f input = case parse (string tag) input of
-      Result xs x
-        | head xs == head tag -> Error $ UnexpectedString "Tag found"
-        | otherwise -> Result xs x
-      Error e -> Error e
+isOpeningTag :: String -> Parser String
+isOpeningTag tag = do
+  openingTag <- some (is (head tag))
+  guard (length openingTag == length tag) <|> unexpectedStringParser ("Invalid opening tag: " ++ openingTag)
+  return openingTag
+
+getContent :: String -> Parser String
+getContent tag = some (isNotString tag) <* string tag
 
 between :: String -> Parser String
-between tag = between' tag *> some (without tag) <* string tag
+between = liftA2 (*>) isOpeningTag getContent
 
-anyChar :: Parser Char
-anyChar = Parser f
-  where
-    f "" = Error UnexpectedEof
-    f (x : xs) = Result xs x
+betweenCode :: String -> Parser String
+betweenCode tag = isOpeningTag tag *> many (isNot '\n') *> is '\n' *> getContent (tag ++ "\n")
+
+-- between :: String -> Parser String
+-- between tag = between' tag *> some (isNotString tag) <* string tag
+
+-- betweenCode :: String -> Parser String
+-- betweenCode tag = between' tag *> many (isNot '\n') *> is '\n' *> some (isNotString (tag ++ "\n")) <* string tag
 
 headingSepLength :: Parser Int
 headingSepLength = do
-  seps <- some (is '=') <|> some (is '-')
+  seps <- inlineSpace *> (some (is '=') <|> some (is '-'))
+  _ <- inlineSpace *> is '\n'
   guard (length seps >= 2) <|> unexpectedStringParser seps
   return $ if head seps == '=' then 1 else 2
 
 hashLength :: Parser Int
 hashLength = do
-  hashes <- some (is '#')
+  hashes <- inlineSpace *> some (is '#')
   guard (length hashes <= 6) <|> unexpectedStringParser hashes
   return $ length hashes

@@ -58,6 +58,7 @@ test-suite batch
       Paths_exercises
   hs-source-dirs:
       test
+  ghc-options: -threaded
   build-depends:
       Glob
     , base >=4.7 && <5
