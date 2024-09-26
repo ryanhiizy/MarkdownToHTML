@@ -3,8 +3,8 @@
 -- | Implementation of a parser-combinator.
 module Parser where
 
-import Control.Applicative
-import Control.Monad (ap, guard, replicateM)
+import Control.Applicative hiding (optional)
+import Control.Monad (guard, replicateM)
 import Data.Char
   ( isAlpha,
     isDigit,
@@ -12,7 +12,7 @@ import Data.Char
     isSpace,
     isUpper,
   )
-import Data.List (isPrefixOf, isSuffixOf)
+import Data.List (isPrefixOf)
 import Instances
   ( ParseError (..),
     ParseResult (..),
@@ -355,28 +355,19 @@ lookAhead (Parser p) = Parser f
 isNotWhitespace :: Parser Char
 isNotWhitespace = lookAhead (satisfy (not . isSpace))
 
--- parseCharNTimes n c = traverse (const (is c)) [1 .. n]
+isPositiveInt :: Parser Int
+isPositiveInt = lookAhead (satisfy (/= '-')) *> int
+
+-- not used
 parseCharNTimes :: Int -> Char -> Parser String
 parseCharNTimes n = replicateM n . is
-
--- noLeadingSpaces :: Parser String
--- noLeadingSpaces = do
---   whitespace <- inlineSpace
---   guard (null whitespace) <|> unexpectedStringParser ("Expected no leading spaces: " ++ whitespace)
---   return whitespace
-
-isPositiveInt :: Parser Int
-isPositiveInt = do
-  n <- int
-  guard (n > 0) <|> unexpectedStringParser ("Expected a positive integer: " ++ show n)
-  return n
 
 isNotString :: String -> Parser Char
 isNotString tag = Parser f
   where
     f "" = Error UnexpectedEof
     f input@(x : xs)
-      | tag `isPrefixOf` input = Error $ UnexpectedString "Closing tag found"
+      | tag `isPrefixOf` input = Error $ UnexpectedString ("String found: " ++ input)
       | otherwise = Result xs x
 
 isOpeningTag :: String -> Parser String
@@ -394,12 +385,6 @@ between = liftA2 (*>) isOpeningTag getContent
 betweenCode :: String -> Parser String
 betweenCode tag = isOpeningTag tag *> many (isNot '\n') *> is '\n' *> getContent (tag ++ "\n")
 
--- between :: String -> Parser String
--- between tag = between' tag *> some (isNotString tag) <* string tag
-
--- betweenCode :: String -> Parser String
--- betweenCode tag = between' tag *> many (isNot '\n') *> is '\n' *> some (isNotString (tag ++ "\n")) <* string tag
-
 headingSepLength :: Parser Int
 headingSepLength = do
   seps <- inlineSpace *> (some (is '=') <|> some (is '-'))
@@ -412,3 +397,14 @@ hashLength = do
   hashes <- inlineSpace *> some (is '#')
   guard (length hashes <= 6) <|> unexpectedStringParser hashes
   return $ length hashes
+
+tags :: [String]
+tags = ["\n", "_", "**", "~~", "[", "`", "[^", "![", "```"]
+
+freeText' :: Parser Char
+freeText' = Parser f
+  where
+    f "" = Error UnexpectedEof
+    f input@(x : xs)
+      | any (`isPrefixOf` input) tags = Error $ UnexpectedString "Text modifiers are not allowed in free text"
+      | otherwise = Result xs x

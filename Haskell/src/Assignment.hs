@@ -1,11 +1,11 @@
 module Assignment (markdownParser) where
 
-import Control.Applicative (Alternative (..), Applicative (liftA2), asum, liftA3, optional)
+import Control.Applicative (Alternative (..), Applicative (liftA2), asum, liftA3)
 import Control.Monad (guard)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
-import Instances (ParseError (..), ParseResult (..), Parser (..))
-import Parser (between, betweenCode, charTok, getContent, hashLength, headingSepLength, inlineSpace, is, isNotWhitespace, isPositiveInt, space, string, untilChar, untilIncludingChar, untilIncludingCharTok)
+import Instances (Parser (..))
+import Parser (between, betweenCode, charTok, freeText', getContent, hashLength, headingSepLength, inlineSpace, is, isNotWhitespace, isPositiveInt, space, string, unexpectedStringParser, untilChar, untilIncludingChar, untilIncludingCharTok)
 
 data ADT
   = Italic String
@@ -20,8 +20,10 @@ data ADT
   | Heading Int [ADT]
   | Blockquote [ADT]
   | Code String
-  | OrderedList Int Int [ADT]
+  | Item [ADT]
+  | OrderedList [ADT]
   | NewLine Char
+  | Text [ADT]
   | Paragraph [ADT]
   deriving (Show, Eq)
 
@@ -48,20 +50,11 @@ image =
   liftA3
     Image
     (string "![" *> untilIncludingCharTok ']')
-    (is '(' *> getContent " \"" <* string " \"")
+    (is '(' *> getContent " \"")
     (untilIncludingCharTok '"' <* is ')')
 
 footnoteReference :: Parser ADT
 footnoteReference = liftA2 FootnoteReference footnote (charTok ':' *> untilChar '\n')
-
-freeText' :: Parser Char
-freeText' = Parser f
-  where
-    f "" = Error UnexpectedEof
-    f (x : _) | x == '\n' = Error $ UnexpectedString "Newline found"
-    f input@(x : xs) = case parse (some $ asum modifiersArray) input of
-      Result _ _ -> Error $ UnexpectedString "Text modifiers are not allowed in free text"
-      Error _ -> Result xs x
 
 freeText :: Parser ADT
 freeText = FreeText <$> some freeText'
@@ -75,28 +68,30 @@ blockquote = Blockquote <$> (inlineSpace *> charTok '>' *> line)
 code :: Parser ADT
 code = Code <$> betweenCode "```"
 
-validateOrder :: Bool -> Parser Int
-validateOrder first = do
-  n <- isPositiveInt
-  guard (if first then n == 1 else n > 1)
-  return n
+nestedList :: Int -> Parser ADT
+nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 
-orderedList' :: Bool -> Int -> Parser [ADT]
-orderedList' first indentLevel = do
-  n <- validateOrder first
-  _ <- string ". "
-  line' <- line
-  _ <- optional (is '\n')
-  newIndentLevel <- length <$> many (is ' ')
-  rest <-
-    (guard (newIndentLevel == indentLevel) *> orderedList' False indentLevel)
-      <|> (guard (newIndentLevel `mod` 4 == 0 && newIndentLevel <= indentLevel) *> orderedList' False newIndentLevel)
-      <|> (guard (newIndentLevel == indentLevel + 4) *> orderedList' True newIndentLevel)
-      <|> return []
-  return $ OrderedList n indentLevel line' : rest
+-- need to check > 1?
+listContent :: Int -> Parser ADT
+listContent n = do
+  indent <- length <$> inlineSpace
+  guard (indent == n) <|> unexpectedStringParser "Indentation must be equal to the current level"
+  _ <- isPositiveInt *> string ". "
+  Item <$> line
+
+list :: Int -> Parser ADT
+list n = is '\n' *> (nestedList n <|> listContent n)
+
+orderedList' :: Int -> Parser ADT
+orderedList' n = do
+  number <- isPositiveInt
+  guard (number == 1) <|> unexpectedStringParser "Number must be 1"
+  headList <- Item <$> (string ". " *> line)
+  restList <- many (list n)
+  return $ OrderedList (headList : restList)
 
 orderedList :: Parser ADT
-orderedList = OrderedList 0 0 <$> (isNotWhitespace *> orderedList' True 0)
+orderedList = isNotWhitespace *> orderedList' 0
 
 ------------------------------------------------------------
 
@@ -104,7 +99,7 @@ newline :: Parser ADT
 newline = NewLine <$> is '\n'
 
 modifiersArray :: [Parser ADT]
-modifiersArray = [italic, bold, strikethrough, link, inlineCode, footnote, image, footnoteReference, code]
+modifiersArray = [italic, bold, strikethrough, link, inlineCode, footnoteReference, footnote, image, code]
 
 line :: Parser [ADT]
 line = some (asum $ modifiersArray <|> [freeText])
