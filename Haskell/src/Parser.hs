@@ -12,6 +12,7 @@ import Data.Char
     isSpace,
     isUpper,
   )
+import Data.Functor (($>))
 import Data.List (isPrefixOf)
 import Instances
   ( ParseError (..),
@@ -339,6 +340,27 @@ unexpectedStringParser = Parser . const . Error . UnexpectedString
 untilChar :: Char -> Parser String
 untilChar = some . isNot
 
+manyTill :: Parser a -> Parser b -> Parser [a]
+manyTill p end = manyTill'
+  where
+    manyTill' = (end $> []) <|> liftA2 (:) p manyTill'
+
+manyTill_ :: Parser Char -> Parser Char -> Parser String
+manyTill_ p end = manyTill_'
+  where
+    manyTill_' =
+      (end >>= \res -> pure [res])
+        <|> liftA2 (:) p manyTill_'
+
+someTill :: Parser a -> Parser b -> Parser [a]
+someTill p end = liftA2 (:) p (manyTill p end)
+
+someTill_ :: Parser Char -> Parser Char -> Parser String
+someTill_ p end = liftA2 (:) p (manyTill_ p end)
+
+anyChar :: Parser Char
+anyChar = char
+
 untilIncludingChar :: Char -> Parser String
 untilIncludingChar c = untilChar c <* is c
 
@@ -356,7 +378,7 @@ isNotWhitespace :: Parser Char
 isNotWhitespace = lookAhead (satisfy (not . isSpace))
 
 isPositiveInt :: Parser Int
-isPositiveInt = lookAhead (satisfy (/= '-')) *> int
+isPositiveInt = isNotWhitespace *> lookAhead (satisfy (/= '-')) *> int
 
 -- not used
 parseCharNTimes :: Int -> Char -> Parser String
@@ -382,8 +404,14 @@ getContent tag = some (isNotString tag) <* string tag
 between :: String -> Parser String
 between = liftA2 (*>) isOpeningTag getContent
 
+betweenTwo :: String -> String -> Parser String
+betweenTwo opening closing = isOpeningTag opening *> getContent closing
+
+betweenTwoTok :: String -> String -> Parser String
+betweenTwoTok opening closing = betweenTwo opening closing <* inlineSpace
+
 betweenCode :: String -> Parser String
-betweenCode tag = isOpeningTag tag *> many (isNot '\n') *> is '\n' *> getContent (tag ++ "\n")
+betweenCode tag = inlineSpace *> isOpeningTag tag *> many (isNot '\n') *> is '\n' *> getContent (tag ++ "\n")
 
 headingSepLength :: Parser Int
 headingSepLength = do

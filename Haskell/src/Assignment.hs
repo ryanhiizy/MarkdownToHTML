@@ -4,8 +4,9 @@ import Control.Applicative (Alternative (..), Applicative (liftA2), asum, liftA3
 import Control.Monad (guard)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
+import Debug.Trace
 import Instances (Parser (..))
-import Parser (between, betweenCode, charTok, freeText', getContent, hashLength, headingSepLength, inlineSpace, is, isNotWhitespace, isPositiveInt, space, string, unexpectedStringParser, untilChar, untilIncludingChar, untilIncludingCharTok)
+import Parser (between, betweenCode, betweenTwo, betweenTwoTok, charTok, freeText', hashLength, headingSepLength, inlineSpace, is, isNotWhitespace, isPositiveInt, space, string, unexpectedStringParser, untilChar, untilIncludingCharTok)
 
 data ADT
   = Italic String
@@ -23,7 +24,6 @@ data ADT
   | Item [ADT]
   | OrderedList [ADT]
   | NewLine Char
-  | Text [ADT]
   | Paragraph [ADT]
   deriving (Show, Eq)
 
@@ -37,20 +37,22 @@ strikethrough :: Parser ADT
 strikethrough = Strikethrough <$> between "~~"
 
 link :: Parser ADT
-link = liftA2 Link (is '[' *> untilIncludingCharTok ']') (is '(' *> untilIncludingChar ')')
+link = liftA2 Link (betweenTwoTok "[" "]") (betweenTwo "(" ")")
 
 inlineCode :: Parser ADT
 inlineCode = InlineCode <$> between "`"
 
 footnote :: Parser ADT
-footnote = Footnote <$> (string "[^" *> isNotWhitespace *> isPositiveInt <* is ']')
+footnote = Footnote <$> (inlineSpace *> string "[^" *> isPositiveInt <* is ']')
 
+-- can there be whitespace between ] and (?
+-- what about whitespace between " and )?
 image :: Parser ADT
 image =
   liftA3
     Image
-    (string "![" *> untilIncludingCharTok ']')
-    (is '(' *> getContent " \"")
+    (inlineSpace *> betweenTwoTok "![" "]")
+    (betweenTwo "(" " \"")
     (untilIncludingCharTok '"' <* is ')')
 
 footnoteReference :: Parser ADT
@@ -73,14 +75,10 @@ nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 
 -- need to check > 1?
 listContent :: Int -> Parser ADT
-listContent n = do
-  indent <- length <$> inlineSpace
-  guard (indent == n) <|> unexpectedStringParser "Indentation must be equal to the current level"
-  _ <- isPositiveInt *> string ". "
-  Item <$> line
+listContent n = string (replicate n ' ') *> isPositiveInt *> string ". " *> (Item <$> line)
 
 list :: Int -> Parser ADT
-list n = is '\n' *> (nestedList n <|> listContent n)
+list = (is '\n' *>) . liftA2 (<|>) nestedList listContent
 
 orderedList' :: Int -> Parser ADT
 orderedList' n = do
