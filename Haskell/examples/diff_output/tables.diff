@@ -1,48 +1,44 @@
 diff --git a/examples/expected_output/tables.html b/examples/output/tables.html
-index 70fde47..cf251f7 100644
+index 70fde47..8eb1ac6 100644
 --- a/examples/expected_output/tables.html
 +++ b/examples/output/tables.html
-@@ -1,38 +1,5 @@
--<!DOCTYPE html>
--<html lang="en">
--
--<head>
--    <meta charset="UTF-8">
--    <title>Test</title>
--</head>
--
--<body>
--    <table>
--        <thead>
--            <tr>
+@@ -10,26 +10,27 @@
+     <table>
+         <thead>
+             <tr>
 -                <th>Tables</th>
 -                <th>Are</th>
 -                <th>Cool</th>
--            </tr>
--        </thead>
--        <tbody>
--            <tr>
++                <th>    <li>Tables        </li>
++                    <li>Are           </li>
++                    <li>Cool  </li>
++                </th>
+             </tr>
+         </thead>
+         <tbody>
+             <tr>
 -                <td>here</td>
 -                <td>is</td>
 -                <td>data</td>
--            </tr>
--            <tr>
++                <li>here          </li>
++                <li>is            </li>
++                <li>data  </li>
+             </tr>
+             <tr>
 -                <td>here</td>
 -                <td>is</td>
 -                <td>data</td>
--            </tr>
--            <tr>
++                <li>here          </li>
++                <li>is            </li>
++                <li>data  </li>
+             </tr>
+             <tr>
 -                <td>here</td>
 -                <td>is also</td>
 -                <td><strong>bolded data</strong></td>
--            </tr>
--        </tbody>
--    </table>
--</body>
--
--</html>
-+| Tables        | Are           | Cool  |
-+| ------------- | ------------- | ----- |
-+| here          | is            | data  |
-+| here          | is            | data  |
-+| here | is also | **bolded data** |
++                <li>here </li>
++                <li>is also </li>
++                <li><strong>bolded data</strong> </li>
+             </tr>
+         </tbody>
+     </table>
