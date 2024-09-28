@@ -4,7 +4,6 @@
 module Parser where
 
 import Control.Applicative hiding (optional)
-import Control.Exception (try)
 import Control.Monad (guard, replicateM)
 import Data.Char
   ( isAlpha,
@@ -14,8 +13,6 @@ import Data.Char
     isUpper,
   )
 import Data.Functor (($>))
-import Data.List (isPrefixOf)
-import Debug.Trace (trace)
 import Instances
   ( ParseError (..),
     ParseResult (..),
@@ -336,23 +333,13 @@ stringTok = tok . string
 ---- ADDITIONAL PARSERS ----
 ----------------------------
 
--- >>> parse (manyTill_ anyChar (is 'A')) "A"
--- Result >< "A"
--- >>> parse (manyTill_ anyChar (charTok 'A')) "ryanA    "
--- Result >< "ryanA"
--- manyTill_ :: Parser a -> Parser b -> Parser ([a], b)
--- manyTill_ p end = manyTill_'
---   where
---     manyTill_' =
---       (end >>= \res -> pure ([], res))
---         <|> liftA2 (\x (xs, y) -> (x : xs, y)) p manyTill_'
+anyChar :: Parser Char
+anyChar = char
 
--- >>> parse (someTill_ anyChar (is 'A')) "A"
+-- >>> parse (isNotEof) ""
 -- Unexpected end of stream
--- >>> parse (someTill_ anyChar (charTok 'A')) "ryanA    "
--- Result >< "ryanA"
--- someTill_ :: Parser a -> Parser b -> Parser ([a], b)
--- someTill_ p end = liftA2 (\x (xs, y) -> (x : xs, y)) p (manyTill_ p end)
+isNotEof :: Parser Char
+isNotEof = lookAhead anyChar
 
 unexpectedStringParser :: String -> Parser a
 unexpectedStringParser = Parser . const . Error . UnexpectedString
@@ -366,16 +353,22 @@ manyTill p end = manyTill'
   where
     manyTill' = (end $> []) <|> liftA2 (:) p manyTill'
 
--- >>> isErrorResult $ parse (someTill anyChar (is 'A')) "A"
+manyCharTill :: Parser b -> Parser String
+manyCharTill = manyTill anyChar
+
+-- >>> isErrorResult $ parse (someCharTill (is 'A')) "A"
 -- True
 -- >>> parse (someTill (noneof "\n|") (inlineSpace *> oneof "\n|")) " ryan is the \n  best     | "
 -- Result >  best     | < " ryan is the"
 someTill :: Parser a -> Parser b -> Parser [a]
 someTill p end = liftA2 (:) p (manyTill p end)
 
+someCharTill :: Parser b -> Parser String
+someCharTill = someTill anyChar
+
 -- Slightly different version of the traditional `sepBy1` parser
 -- Ensures that the values are surrounded by the separator
--- >>> parse (sepBy1 (some (isNot '|')) (is '|')) "|Tables|Are|Cool|"
+-- >>> parse (sepBy1 (some (isNot '|' <* inlineSpace)) (inlineSpace *> charTok '|')) " | Ta             bles | Are | Cool     | "
 -- Result >< ["Tables","Are","Cool"]
 sepBy1 :: Parser a -> Parser b -> Parser [a]
 sepBy1 p sep = some (sep *> p) <* sep
@@ -383,20 +376,11 @@ sepBy1 p sep = some (sep *> p) <* sep
 oneofTok :: String -> Parser Char
 oneofTok = tok . oneof
 
+isEnd :: Parser ()
+isEnd = eof <|> lookAhead (is '\n' $> ())
+
 optional :: Parser a -> Parser ()
 optional p = (p $> ()) <|> pure ()
-
-untilChar :: Char -> Parser String
-untilChar = some . isNot
-
-untilIncludingChar :: Char -> Parser String
-untilIncludingChar c = someTill (isNot c) (is c)
-
-untilIncludingCharTok :: Char -> Parser String
-untilIncludingCharTok c = someTill (isNot c) (charTok c)
-
-anyChar :: Parser Char
-anyChar = char
 
 lookAhead :: Parser a -> Parser a
 lookAhead (Parser p) = Parser f
@@ -411,22 +395,20 @@ isNotWhitespace = lookAhead (satisfy (not . isSpace))
 isPositiveInt :: Parser Int
 isPositiveInt = isNotWhitespace *> lookAhead (satisfy (/= '-')) *> int
 
-isNotString :: String -> Parser Char
-isNotString tag = Parser f
-  where
-    f "" = Error UnexpectedEof
-    f input@(x : xs)
-      | tag `isPrefixOf` input = Error $ UnexpectedString ("String found: " ++ input)
-      | otherwise = Result xs x
-
 isOpeningTag :: String -> Parser String
 isOpeningTag tag = do
   openingTag <- some (is (head tag))
   guard (length openingTag == length tag) <|> unexpectedStringParser ("Invalid opening tag: " ++ openingTag)
   return openingTag
 
+-- >>> parse (getContent "**") "abc**"
+-- >>> parse (getContent "**") "abc***"
+-- >>> parse (getContent "**") "a*bc**"
+-- Result >< "abc"
+-- Result >*< "abc"
+-- Result >< "a*bc"
 getContent :: String -> Parser String
-getContent tag = someTill (isNotString tag) (string tag)
+getContent tag = someCharTill (string tag)
 
 between :: String -> Parser String
 between = liftA2 (*>) isOpeningTag getContent
@@ -438,15 +420,15 @@ betweenTwoTok :: String -> String -> Parser String
 betweenTwoTok opening closing = betweenTwo opening closing <* inlineSpace
 
 betweenCode :: String -> Parser String
-betweenCode tag = inlineSpace *> isOpeningTag tag *> manyTill (isNot '\n') (is '\n') *> getContent (tag ++ "\n")
+betweenCode tag = inlineSpace *> isOpeningTag tag *> manyTill anyChar (is '\n') *> getContent (tag ++ "\n")
 
 atLeast :: Int -> Parser a -> Parser [a]
 atLeast n p = replicateM n p <* many p
 
 checkHeadingSep :: Parser Int
 checkHeadingSep = do
-  seps <- inlineSpace *> (atLeast 2 (is '=') <|> atLeast 2 (is '-'))
-  _ <- inlineSpace *> is '\n'
+  seps <- atLeast 2 (is '=') <|> atLeast 2 (is '-')
+  _ <- inlineSpace *> isEnd
   return $ if head seps == '=' then 1 else 2
 
 checkHash :: Parser Int
