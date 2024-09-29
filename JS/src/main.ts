@@ -120,7 +120,6 @@ function main() {
             mergeScan((acc: State, reducer: Action) => {
                 const newState = reducer(acc);
 
-                console.log(newState.save);
                 if (newState.save) {
                     return saveHTML(newState);
                 }
