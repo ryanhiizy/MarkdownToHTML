@@ -19,6 +19,8 @@ const markdownInput = document.getElementById(
     "markdown-input",
 ) as HTMLTextAreaElement;
 const checkbox = document.querySelector('input[name="checkbox"]')!;
+const titleInput = document.getElementById("page-title") as HTMLTextAreaElement;
+const saveButton = document.getElementById("save-button") as HTMLButtonElement;
 
 type Action = (_: State) => State;
 
@@ -46,6 +48,20 @@ const checkboxStream$: Observable<Action> = fromEvent(checkbox, "change").pipe(
     map((value) => (s) => ({ ...s, renderHTML: value })),
 );
 
+// Observable for title input field changes
+const title$: Observable<Action> = fromEvent<KeyboardEvent>(
+    titleInput,
+    "input",
+).pipe(
+    map((event) => (event.target as HTMLInputElement).value),
+    map((value) => (s) => ({ ...s, title: value })),
+);
+
+// Observable for the "Save HTML" button click
+const save$: Observable<Action> = fromEvent(saveButton, "click").pipe(
+    map(() => (s) => ({ ...s, save: true })),
+);
+
 function getHTML(s: State): Observable<State> {
     // Get the HTML as a stream
     return ajax<{ html: string }>({
@@ -54,7 +70,7 @@ function getHTML(s: State): Observable<State> {
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: s.markdown,
+        body: s.title + "\n" + s.markdown,
     }).pipe(
         map((response) => response.response), // Extracting the response data
         map((data) => {
@@ -67,7 +83,25 @@ function getHTML(s: State): Observable<State> {
     );
 }
 
+// Function to save the HTML to the backend using the current date and time
+function saveHTML(s: State): Observable<State> {
+    return ajax({
+        url: "/api/saveHTML", // Send request to save the HTML
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: s.HTML,
+    }).pipe(
+        map(() => ({
+            ...s,
+            save: false,
+        })),
+    );
+}
+
 const initialState: State = {
+    title: "Test",
     markdown: "",
     HTML: "",
     renderHTML: true,
@@ -76,19 +110,26 @@ const initialState: State = {
 
 function main() {
     // Subscribe to the input Observable to listen for changes
-    const subscription = merge(input$, checkboxStream$)
+    const subscription = merge(input$, checkboxStream$, title$, save$)
         .pipe(
-            map((reducer: Action) => {
-                // Reset Some variables in the state in every tick
-                const newReducer = compose(reducer)(resetState);
-                return newReducer;
-            }),
+            // map((reducer: Action) => {
+            //     // Reset Some variables in the state in every tick
+            //     const newReducer = compose(reducer)(resetState);
+            //     return newReducer;
+            // }),
             mergeScan((acc: State, reducer: Action) => {
                 const newState = reducer(acc);
+
+                console.log(newState.save);
+                if (newState.save) {
+                    return saveHTML(newState);
+                }
+
                 // getHTML returns an observable of length one
                 // so we `scan` and merge the result of getHTML in to our stream
                 return getHTML(newState);
             }, initialState),
+            map(resetState),
         )
         .subscribe((value) => {
             const htmlOutput = document.getElementById("html-output");

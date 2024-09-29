@@ -1,12 +1,12 @@
-module Assignment (markdownParser, convertADTHTML) where
+module Assignment (markdownParser, convertADTHTML, getTime) where
 
-import Control.Applicative (Alternative (..), Applicative (liftA2), asum, liftA3)
+import Control.Applicative (Alternative (..), Applicative (liftA2), asum, liftA3, optional)
 import Control.Monad (guard)
 import Data.List (isPrefixOf)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Instances (ParseError (..), ParseResult (..), Parser (..))
-import Parser (anyChar, atLeast, between, betweenTwo, betweenTwoTok, charTok, checkHash, checkHeadingSep, inlineSpace, is, isEnd, isNot, isNotWhitespace, isOpeningTag, isPositiveInt, lookAhead, manyTill, optional, sepBy1, someCharTill, space, spaces, string, unexpectedStringParser)
+import Parser (atLeast, between, betweenTwo, betweenTwoTok, charTok, checkHash, checkHeadingSep, inlineSpace, is, isEnd, isNot, isNotWhitespace, isOpeningTag, isPositiveInt, lookAhead, manyCharTill, sepBy1, someCharTill, space, spaces, string, unexpectedStringParser)
 
 data ADT
   = Italic String
@@ -34,10 +34,9 @@ data ADT
 -- $setup
 -- >>> import Instances (isErrorResult, parse)
 
-getResult :: ParseResult a -> (a -> String) -> String
-getResult (Result _ a) f = f a
-getResult _ _ = ""
-
+-- | -------------------------------------------------
+-- | --------------- Text Modifiers ------------------
+-- | -------------------------------------------------
 italic :: Parser ADT
 italic = Italic <$> between "_"
 
@@ -69,7 +68,7 @@ image =
     Image
     (inlineSpace *> is '!' *> isNotWhitespace *> betweenTwoTok "[" "]")
     (betweenTwo "(" " \"")
-    (someCharTill (charTok '"') <* is ')')
+    (someCharTill (is '"') <* is ')')
 
 -- >>> parse footnoteReference "[^1]: My reference.\n[^2]:Another reference.\n[^3]:  The 2 spaces after the colon should be ignored"
 -- >>> parse footnoteReference "[^1]: My reference."
@@ -105,7 +104,7 @@ freeText = FreeText <$> freeText'
 heading :: Parser ADT
 heading = liftA2 Heading checkHash (space *> freeText') <|> flip Heading <$> (freeText' <* charTok '\n') <*> checkHeadingSep
 
--- >>> parse blockquote "> This is a block quote.\n> It can **span** multiple lines."
+-- >>> parse blockquote "> This is a block quote.\n> It can **span** multiple lines.\n"
 -- Result >< Blockquote [FreeText [Text "This is a block quote."],FreeText [Text "It can ",Bold "span",Text " multiple lines."]]
 blockquote :: Parser ADT
 blockquote = Blockquote <$> some (inlineSpace *> charTok '>' *> freeText <* optional (is '\n'))
@@ -119,7 +118,7 @@ blockquote = Blockquote <$> some (inlineSpace *> charTok '>' *> freeText <* opti
 -- < Code "haskell" "main :: IO ()\nmain = do\n    putStrLn \"Never gonna give you up\"\n    putStrLn \"Never gonna let you down\"\n    putStrLn \"Never gonna run around and desert you\""
 code :: Parser ADT
 code = do
-  language <- inlineSpace *> isOpeningTag "```" *> manyTill anyChar (is '\n')
+  language <- inlineSpace *> isOpeningTag "```" *> manyCharTill (is '\n')
   content <- someCharTill (string "\n```" <* isEnd)
   return $ Code language content
 
@@ -143,8 +142,8 @@ orderedList' n = do
   restList <- many (list n)
   return $ OrderedList (headList : restList)
 
--- >>> parse orderedList "1. Item 1\n    1. Sub Item 1\n    2. Sub Item 2\n        1. Sub Sub Item 1\n2. **Bolded Item 2**\n6. Item 3\n7. Item 4"
--- Result >< OrderedList [Item [Text "Item 1"],OrderedList [Item [Text "Sub Item 1"],Item [Text "Sub Item 2"],OrderedList [Item [Text "Sub Sub Item 1"]]],Item [Bold "Bolded Item 2"],Item [Text "Item 3"],Item [Text "Item 4"]]
+-- >>> parse orderedList "1. Item 1\n    1. Sub Item 1\n    2. Sub Item 2\n        1. Sub Sub Item 1\n2. **Bolded** Item 2\n6. Item 3\n7. Item 4"
+-- Result >< OrderedList [Item [Text "Item 1"],OrderedList [Item [Text "Sub Item 1"],Item [Text "Sub Item 2"],OrderedList [Item [Text "Sub Sub Item 1"]]],Item [Bold "Bolded",Text " Item 2"],Item [Text "Item 3"],Item [Text "Item 4"]]
 orderedList :: Parser ADT
 orderedList = isNotWhitespace *> orderedList' 0
 
@@ -237,13 +236,7 @@ convertADTHTML (Body adt) = convertBody adt
 convertADTHTML (Table header body) = convertTable header body
 
 convertMarkdown :: [ADT] -> String
-convertMarkdown adt =
-  "<!DOCTYPE html>\n<html lang=\"en\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Test</title>\n</head>\n\n<body>\n"
-    ++ concatMap convertADTHTML adt
-    ++ "</body>\n\n</html>\n"
-
-convertNewLine :: ADT -> String
-convertNewLine _ = ""
+convertMarkdown = concatMap convertADTHTML
 
 convertItalic :: String -> String
 convertItalic = tag "em"

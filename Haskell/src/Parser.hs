@@ -4,7 +4,7 @@
 module Parser where
 
 import Control.Applicative hiding (optional)
-import Control.Monad (guard, replicateM)
+import Control.Monad (guard, replicateM, void)
 import Data.Char
   ( isAlpha,
     isDigit,
@@ -336,11 +336,6 @@ stringTok = tok . string
 anyChar :: Parser Char
 anyChar = char
 
--- >>> parse (isNotEof) ""
--- Unexpected end of stream
-isNotEof :: Parser Char
-isNotEof = lookAhead anyChar
-
 unexpectedStringParser :: String -> Parser a
 unexpectedStringParser = Parser . const . Error . UnexpectedString
 
@@ -373,14 +368,10 @@ someCharTill = someTill anyChar
 sepBy1 :: Parser a -> Parser b -> Parser [a]
 sepBy1 p sep = some (sep *> p) <* sep
 
-oneofTok :: String -> Parser Char
-oneofTok = tok . oneof
-
+-- >>> parse isEnd ""
+-- Result >< ()
 isEnd :: Parser ()
-isEnd = eof <|> lookAhead (is '\n' $> ())
-
-optional :: Parser a -> Parser ()
-optional p = (p $> ()) <|> pure ()
+isEnd = eof <|> void (lookAhead (is '\n'))
 
 lookAhead :: Parser a -> Parser a
 lookAhead (Parser p) = Parser f
@@ -401,12 +392,6 @@ isOpeningTag tag = do
   guard (length openingTag == length tag) <|> unexpectedStringParser ("Invalid opening tag: " ++ openingTag)
   return openingTag
 
--- >>> parse (getContent "**") "abc**"
--- >>> parse (getContent "**") "abc***"
--- >>> parse (getContent "**") "a*bc**"
--- Result >< "abc"
--- Result >*< "abc"
--- Result >< "a*bc"
 getContent :: String -> Parser String
 getContent tag = someCharTill (string tag)
 
@@ -418,9 +403,6 @@ betweenTwo opening closing = isOpeningTag opening *> getContent closing
 
 betweenTwoTok :: String -> String -> Parser String
 betweenTwoTok opening closing = betweenTwo opening closing <* inlineSpace
-
-betweenCode :: String -> Parser String
-betweenCode tag = inlineSpace *> isOpeningTag tag *> manyTill anyChar (is '\n') *> getContent (tag ++ "\n")
 
 atLeast :: Int -> Parser a -> Parser [a]
 atLeast n p = replicateM n p <* many p

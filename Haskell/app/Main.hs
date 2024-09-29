@@ -1,10 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main (main) where
-
--- import Assignment (markdownParser)
-
-import Assignment (convertADTHTML, markdownParser)
+import Assignment (convertADTHTML, getTime, markdownParser)
+import Control.Monad.Cont (liftIO)
 import Data.Aeson (object, (.=))
 import Data.Aeson.Key (fromString)
 import Data.Text.Lazy (Text, pack, unpack)
@@ -21,6 +18,22 @@ jsonResponse :: [(String, String)] -> ActionM ()
 jsonResponse pairs =
   json $ object [fromString key .= (pack value :: Text) | (key, value) <- pairs]
 
+-- Helper function to build the full HTML document
+buildHTML :: String -> String -> String
+buildHTML title content =
+  "<!DOCTYPE html>\n<html lang=\"en\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <title>"
+    ++ title
+    ++ "</title>\n</head>\n\n<body>\n"
+    ++ content
+    ++ "</body>\n\n</html>\n"
+
+-- Helper function to parse the title and content from the request body
+-- Splits the input string at the first newline character.
+parseTitleAndContent :: String -> (String, String)
+parseTitleAndContent str =
+  let (title, content) = break (== '\n') str
+   in (title, drop 1 content)
+
 main :: IO ()
 main = scotty 3000 $ do
   post "/api/convertMD" $ do
@@ -29,8 +42,18 @@ main = scotty 3000 $ do
     let requestBodyText = decodeUtf8 requestBody
         -- Convert the Text to String
         str = unpack requestBodyText
+        (title, content) = parseTitleAndContent str
         -- Parse the Markdown string using 'markdownParser' and apply 'convertAllHTML'
-        converted_html = getResult (parse markdownParser str) convertADTHTML
+        converted_html = getResult (parse markdownParser content) convertADTHTML
+        fullHTML = buildHTML title converted_html
 
     -- Respond with the converted HTML as JSON
-    jsonResponse [("html", converted_html)]
+    jsonResponse [("html", fullHTML)]
+
+  post "/api/saveHTML" $ do
+    requestBody <- body
+    let html = unpack $ decodeUtf8 requestBody
+    currentTime <- liftIO getTime
+    let dir = "out"
+    let fileName = dir ++ "/" ++ currentTime ++ ".html"
+    liftIO $ writeFile fileName html
