@@ -3,7 +3,7 @@
 -- | Implementation of a parser-combinator.
 module Parser where
 
-import Control.Applicative hiding (optional)
+import Control.Applicative
 import Control.Monad (replicateM, void)
 import Data.Char
   ( isAlpha,
