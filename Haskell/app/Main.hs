@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import Assignment (convertADTHTML, getTime, markdownParser)
+import Assignment (convertADTHTMLwithTitle, getTime, markdownParser)
 import Control.Monad.Cont (liftIO)
 import Data.Aeson (object, (.=))
 import Data.Aeson.Key (fromString)
@@ -18,15 +18,6 @@ jsonResponse :: [(String, String)] -> ActionM ()
 jsonResponse pairs =
   json $ object [fromString key .= (pack value :: Text) | (key, value) <- pairs]
 
--- Helper function to build the full HTML document
-buildHTML :: String -> String -> String
-buildHTML title content =
-  "<!DOCTYPE html>\n<html lang=\"en\">\n\n<head>\n    <meta charset=\"UTF-8\">\n    <title>"
-    ++ title
-    ++ "</title>\n</head>\n\n<body>\n"
-    ++ content
-    ++ "</body>\n\n</html>\n"
-
 -- Helper function to parse the title and content from the request body
 -- Splits the input string at the first newline character.
 parseTitleAndContent :: String -> (String, String)
@@ -42,13 +33,14 @@ main = scotty 3000 $ do
     let requestBodyText = decodeUtf8 requestBody
         -- Convert the Text to String
         str = unpack requestBodyText
+        -- Extract the title and content from the request body
         (title, content) = parseTitleAndContent str
-        -- Parse the Markdown string using 'markdownParser' and apply 'convertAllHTML'
-        converted_html = getResult (parse markdownParser content) convertADTHTML
-        fullHTML = buildHTML title converted_html
+        -- Parse the Markdown string using 'markdownParser' and apply 'convertADTHTMLwithTitle'
+        converted_html = getResult (parse markdownParser content) (convertADTHTMLwithTitle title)
 
     -- Respond with the converted HTML as JSON
-    jsonResponse [("html", fullHTML)]
+    jsonResponse [("html", converted_html)]
+
 
   post "/api/saveHTML" $ do
     requestBody <- body
