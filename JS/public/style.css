@@ -2,60 +2,75 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
+    overflow-x: clip;
 }
 
 header,
 footer {
     background-color: #333;
     color: #fff;
-    padding: 10px;
+    padding: 11px;
     text-align: center;
 }
 
 main {
+    min-height: 80vh;
     padding: 20px;
-}
-
-h1,
-h2 {
-    margin-bottom: 10px;
 }
 
 #container {
     display: flex;
-    flex-direction: row;
-    /* Ensure the sections are laid out horizontally */
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1em;
 }
 
 textarea {
-    flex: 1;
-    /* Take up available space equally */
+    width: 100%;
     height: 200px;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
+    box-sizing: border-box;
     resize: vertical;
 }
 
-#html-output {
+#input-section,
+#output-section {
     flex: 1;
-    /* Take up available space equally */
-    margin-left: 10px;
-    /* Add some space between input and output */
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 10px;
-    min-height: 100px;
+    min-width: 300px;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
-footer {
+#html-output {
+    height: 200px;
+}
+
+#render-container {
     margin-top: 20px;
-    background-color: #333;
-    color: #fff;
-    padding: 10px;
-    text-align: center;
-    position: fixed;
-    bottom: 0;
-    width: 100%;
+}
+
+h1,
+h2 {
+    margin: 10px 0;
+}
+
+#page-title {
+    margin-top: 10px;
+}
+
+button {
+    display: block;
+    margin-top: 10px;
+}
+
+input[name="checkbox"] {
+    visibility: hidden;
+    position: absolute;
+    width: 0;
+    height: 0;
+}
+
+#render-container {
+    padding: 5px 0;
 }
