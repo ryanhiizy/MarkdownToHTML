@@ -392,12 +392,12 @@ isEnd = eof <|> void (lookAhead (is '\n'))
 
 -- | Ensures that the next character is not a whitespace without consuming it
 --
--- >>> parse notWhitespace "a"
+-- >>> parse isNotWhitespace "a"
 -- Result >a< 'a'
--- >>> isErrorResult (parse notWhitespace " a")
+-- >>> isErrorResult (parse isNotWhitespace " a")
 -- True
-notWhitespace :: Parser Char
-notWhitespace = lookAhead (satisfy (not . isSpace))
+isNotWhitespace :: Parser Char
+isNotWhitespace = lookAhead (satisfy (not . isSpace))
 
 -- | Only parses positive integers that do not start with a whitespace
 --
@@ -406,7 +406,7 @@ notWhitespace = lookAhead (satisfy (not . isSpace))
 -- >>> isErrorResult (parse positiveInt "-1")
 -- True
 positiveInt :: Parser Int
-positiveInt = notWhitespace *> lookAhead (satisfy (/= '-')) *> int
+positiveInt = isNotWhitespace *> lookAhead (satisfy (/= '-')) *> int
 
 -- | Parses at least n of a given character, consuming extra occurrences of the character
 --
