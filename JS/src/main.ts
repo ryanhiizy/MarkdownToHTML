@@ -1,5 +1,5 @@
-import { fromEvent, merge } from "rxjs";
-import { map, mergeScan, first } from "rxjs/operators";
+import { fromEvent, merge, of } from "rxjs";
+import { map, mergeScan, first, mergeWith } from "rxjs/operators";
 import { ajax } from "rxjs/ajax";
 import { type Observable } from "rxjs";
 import { State } from "./types";
@@ -40,6 +40,7 @@ const input$: Observable<Action> = fromEvent<KeyboardEvent>(
     "input",
 ).pipe(
     map((event) => (event.target as HTMLInputElement).value),
+    mergeWith(of(markdownInput.value)),
     map((value) => (s) => ({ ...s, markdown: value })),
 );
 
@@ -131,22 +132,26 @@ function main() {
             map(resetState),
         )
         .subscribe((value) => {
-            const htmlOutput = document.getElementById("html-output");
+            const htmlOutput = document.getElementById(
+                "html-output",
+            ) as HTMLTextAreaElement | null;
+            const htmlRender = document.getElementById("html-render");
             if (htmlOutput) {
                 htmlOutput.innerHTML = "";
                 htmlOutput.textContent = "";
-                if (value.renderHTML) {
-                    const highlight =
-                        '<link rel="stylesheet" href="https://unpkg.com/@highlightjs/cdn-assets@11.3.1/styles/default.min.css" />';
-                    htmlOutput.innerHTML = highlight + value.HTML;
-                    // Magic code to add code highlighting
-                    const blocks = htmlOutput.querySelectorAll("pre code");
-                    blocks.forEach((block) =>
-                        hljs.highlightElement(block as HTMLElement),
-                    );
-                } else {
-                    htmlOutput.textContent = value.HTML;
-                }
+                htmlOutput.textContent = value.HTML;
+                htmlOutput.value = value.HTML;
+            }
+            if (htmlRender) {
+                htmlRender.innerHTML = "";
+                htmlRender.textContent = "";
+                const highlight =
+                    '<link rel="stylesheet" href="https://unpkg.com/@highlightjs/cdn-assets@11.3.1/styles/default.min.css" />';
+                htmlRender.innerHTML = highlight + value.HTML;
+                const blocks = htmlRender.querySelectorAll("pre code");
+                blocks.forEach((block) =>
+                    hljs.highlightElement(block as HTMLElement),
+                );
             }
         });
 }
