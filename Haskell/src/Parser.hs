@@ -4,7 +4,7 @@
 module Parser where
 
 import Control.Applicative hiding (optional)
-import Control.Monad (guard, replicateM, void)
+import Control.Monad (replicateM, void)
 import Data.Char
   ( isAlpha,
     isDigit,
