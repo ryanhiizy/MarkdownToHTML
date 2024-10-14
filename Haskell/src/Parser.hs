@@ -329,50 +329,43 @@ commaTok = charTok ','
 stringTok :: String -> Parser String
 stringTok = tok . string
 
-----------------------------
+
 ---- ADDITIONAL PARSERS ----
-----------------------------
 
-anyChar :: Parser Char
-anyChar = char
-
+-- | Returns an unexpected string error wrapped in a parser
 unexpectedStringParser :: String -> Parser a
 unexpectedStringParser = Parser . const . Error . UnexpectedString
 
--- >>> parse (manyTill anyChar (is 'A')) "A"
+-- | Executes parser `a` until parser `b` succeeds zero or more times
+--
+-- >>> parse (manyTill (is 'a') (is 'b')) "aaaab"
+-- Result >< "aaaa"
+-- >>> parse (manyTill (is 'a') (is 'b')) "b"
 -- Result >< ""
--- >>> parse (manyTill anyChar (inlineSpace *> charTok 'A')) "ry an     A    "
--- Result >< "ry an"
 manyTill :: Parser a -> Parser b -> Parser [a]
 manyTill p end = manyTill'
   where
     manyTill' = (end $> []) <|> liftA2 (:) p manyTill'
 
-manyCharTill :: Parser b -> Parser String
-manyCharTill = manyTill anyChar
-
--- >>> isErrorResult $ parse (someCharTill (is 'A')) "A"
+-- | Executes parser `a` until parser `b` succeeds one or more times
+--
+-- >>> isErrorResult (parse (someTill (is 'a') (is 'b')) "b")
 -- True
--- >>> parse (someTill (noneof "\n|") (inlineSpace *> oneof "\n|")) " ryan is the \n  best     | "
--- Result >  best     | < " ryan is the"
 someTill :: Parser a -> Parser b -> Parser [a]
 someTill p end = liftA2 (:) p (manyTill p end)
 
+-- | Parses all characters until the given parser succeeds zero or more times
+manyCharTill :: Parser b -> Parser String
+manyCharTill = manyTill char
+
+-- | Parses all characters until the given parser succeeds one or more times
 someCharTill :: Parser b -> Parser String
-someCharTill = someTill anyChar
+someCharTill = someTill char
 
--- Slightly different version of the traditional `sepBy1` parser
--- Ensures that the values are surrounded by the separator
--- >>> parse (sepBy1 (some (isNot '|' <* inlineSpace)) (inlineSpace *> charTok '|')) " | Ta             bles | Are | Cool     | "
--- Result >< ["Tables","Are","Cool"]
-sepBy1 :: Parser a -> Parser b -> Parser [a]
-sepBy1 p sep = some (sep *> p) <* sep
-
--- >>> parse isEnd ""
--- Result >< ()
-isEnd :: Parser ()
-isEnd = eof <|> void (lookAhead (is '\n'))
-
+-- | Executes the given parser and return the result without consuming the input
+--
+-- >>> parse (lookAhead (is 'a')) "abc"
+-- Result >abc< 'a'
 lookAhead :: Parser a -> Parser a
 lookAhead (Parser p) = Parser f
   where
@@ -380,41 +373,44 @@ lookAhead (Parser p) = Parser f
       Result _ c -> Result input c
       Error e -> Error e
 
-isNotWhitespace :: Parser Char
-isNotWhitespace = lookAhead (satisfy (not . isSpace))
+-- | Modified version of the traditional `sepBy1` that ensures the values are surrounded by the separator
+--
+-- >>> parse (sepBy1 (string "abc") (is '|')) "|abc|abc|abc|"
+-- Result >< ["abc","abc","abc"]
+sepBy1 :: Parser a -> Parser b -> Parser [a]
+sepBy1 p sep = some (sep *> p) <* sep
 
-isPositiveInt :: Parser Int
-isPositiveInt = isNotWhitespace *> lookAhead (satisfy (/= '-')) *> int
+-- | Ensures that the next character is a newline or the end of the file without consuming the newline
+--
+-- >>> parse isEnd ""
+-- Result >< ()
+-- >>> parse isEnd "\n"
+-- Result >
+-- < ()
+isEnd :: Parser ()
+isEnd = eof <|> void (lookAhead (is '\n'))
 
-isOpeningTag :: String -> Parser String
-isOpeningTag tag = do
-  openingTag <- some (is (head tag))
-  guard (length openingTag == length tag) <|> unexpectedStringParser ("Invalid opening tag: " ++ openingTag)
-  return openingTag
+-- | Ensures that the next character is not a whitespace without consuming it
+--
+-- >>> parse notWhitespace "a"
+-- Result >a< 'a'
+-- >>> isErrorResult (parse notWhitespace " a")
+-- True
+notWhitespace :: Parser Char
+notWhitespace = lookAhead (satisfy (not . isSpace))
 
-getContent :: String -> Parser String
-getContent tag = someCharTill (string tag)
+-- | Only parses positive integers that do not start with a whitespace
+--
+-- >>> parse positiveInt "1"
+-- Result >< 1
+-- >>> isErrorResult (parse positiveInt "-1")
+-- True
+positiveInt :: Parser Int
+positiveInt = notWhitespace *> lookAhead (satisfy (/= '-')) *> int
 
-between :: String -> Parser String
-between = liftA2 (*>) isOpeningTag getContent
-
-betweenTwo :: String -> String -> Parser String
-betweenTwo opening closing = isOpeningTag opening *> getContent closing
-
-betweenTwoTok :: String -> String -> Parser String
-betweenTwoTok opening closing = betweenTwo opening closing <* inlineSpace
-
-atLeast :: Int -> Parser a -> Parser [a]
-atLeast n p = replicateM n p <* many p
-
-checkHeadingSep :: Parser Int
-checkHeadingSep = do
-  seps <- atLeast 2 (is '=') <|> atLeast 2 (is '-')
-  _ <- inlineSpace *> isEnd
-  return $ if head seps == '=' then 1 else 2
-
-checkHash :: Parser Int
-checkHash = do
-  hashes <- inlineSpace *> some (is '#')
-  guard (length hashes <= 6) <|> unexpectedStringParser hashes
-  return $ length hashes
+-- | Parses at least n of a given character, consuming extra occurrences of the character
+--
+-- >>> parse (atLeast 3 'a') "aaaaab"
+-- Result >b< "aaa"
+atLeast :: Int -> Char -> Parser String
+atLeast n c = replicateM n (is c) <* many (is c)
