@@ -330,7 +330,7 @@ stringTok :: String -> Parser String
 stringTok = tok . string
 
 
----- ADDITIONAL PARSERS ----
+---- Additional Parsers ----
 
 -- | Returns an unexpected string error wrapped in a parser
 unexpectedStringParser :: String -> Parser a
