@@ -1,7 +1,7 @@
 module Assignment (markdownParser, convertADTHTML, getTime, convertADTHTMLwithTitle) where
 
 import Control.Applicative (Alternative (..), Applicative (liftA2), liftA3, optional)
-import Control.Monad (guard, void)
+import Control.Monad (guard)
 import Data.Foldable (asum)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
@@ -37,38 +37,36 @@ data ADT
 
 
 ---- Text Modifiers ----
+
+italic :: Parser ADT
+italic = Italic <$> nestedBetween "_"
+
+bold :: Parser ADT
+bold = Bold <$> nestedBetween "**"
+
+strikethrough :: Parser ADT
+strikethrough = Strikethrough <$> nestedBetween "~~"
+
+link :: Parser ADT
+link = liftA2 Link (nestedbetweenTwo "[" "]") (inlineSpace *> betweenTwo "(" ")")
+
+inlineCode :: Parser ADT
+inlineCode = InlineCode <$> between "`"
+
+footnote :: Parser ADT
+footnote = Footnote <$> footnote'
+
+
+---- Text Modifier Helpers ----
+
+footnote' :: Parser Int
+footnote' = string "[^" *> positiveInt <* is ']'
+
 between :: String -> Parser String
 between = liftA2 (*>) openingTag (someCharTill . string)
 
 betweenTwo :: String -> String -> Parser String
 betweenTwo opening closing = openingTag opening *> someCharTill (string closing)
-
-try :: Parser a -> Parser (Maybe a)
-try p = Parser $ \input -> case parse p input of
-  Result rest a -> Result rest (Just a)
-  Error _ -> Result input Nothing
-
--- >>> parse (notFollowedBy (string "abc")) "absc"
--- Result >absc< ()
-notFollowedBy :: Parser a -> Parser ()
-notFollowedBy p = do
-  result <- try p
-  case result of
-    Just _ -> unexpectedStringParser "Unexpected string"
-    Nothing -> return ()
-
-
-text' :: String -> Parser Char
-text' a = Parser f
-  where
-    f "" = Error UnexpectedEof
-    f (x : _) | x `elem` a = Error $ UnexpectedString "Break character found"
-    f input@(x : xs) = case parse (asum modifiers) input of
-      Result _ _ -> Error $ UnexpectedString "Text modifiers are not allowed in free text"
-      Error _ -> Result xs x
-
-text :: String -> Parser ADT
-text a = Text <$> some (text' a)
 
 openingTag :: String -> Parser String
 openingTag t = do
@@ -76,8 +74,11 @@ openingTag t = do
   _ <- lookAhead (isNot (head t)) -- Prevent parsing cases such as "***a**"
   return result
 
-r :: String -> Parser ADT
-r t = Text <$> some (Parser f)
+modifiers :: [Parser ADT]
+modifiers = [italic, bold, strikethrough, link, inlineCode, footnote]
+
+nested :: String -> Parser ADT
+nested t = Text <$> some (Parser f)
   where
     f "" = Error UnexpectedEof
     f (x : _) | x == '\n' = Error $ UnexpectedString "Newline found"
@@ -85,167 +86,109 @@ r t = Text <$> some (Parser f)
       Result _ _ -> Error $ UnexpectedString "Closing tag found"
       Error _ -> Result xs x
 
--- >>> parse (nestedBetween "**") "**_ryan_ryan**"
--- Result >< [Italic [Text "ryan"],Text "ryan"]
 nestedBetween :: String -> Parser [ADT]
 nestedBetween t = do
   _ <- string t
   _ <- lookAhead (isNot (head t)) -- Prevent parsing cases such as "***a**"
-  someTill (asum modifiers <|> r t) (string t)
+  someTill (asum modifiers <|> nested t) (string t)
 
--- >>> parse (nestedBetween "**") "**_ryan_ryan**"
--- Result >< [Italic [Text "ryan"],Text "ryan"]
 nestedbetweenTwo :: String -> String -> Parser [ADT]
-nestedbetweenTwo t1 t2 = do
-  _ <- string t1
-  _ <- lookAhead (isNot (head t1)) -- Prevent parsing cases such as "***a**"
-  someTill (asum modifiers <|> r t2) (string t2)
+nestedbetweenTwo opening closing = do
+  _ <- string opening
+  _ <- lookAhead (isNot (head opening)) -- Prevent parsing cases such as "***a**"
+  someTill (asum modifiers <|> nested closing) (string closing)
 
-modifiers :: [Parser ADT]
-modifiers = [italic, bold, strikethrough, link, inlineCode, footnote]
 
--- >>> parse italic "_**ryan**_"
--- Result >< Italic [Bold [Text "ryan"]]
-italic :: Parser ADT
-italic = Italic <$> nestedBetween "_"
+---- Image ----
 
--- >>> parse bold "**_ryan_**"
--- Result >< Bold [Italic [Text "ryan"]]
-bold :: Parser ADT
-bold = Bold <$> nestedBetween "**"
-
--- >>> parse strikethrough "~~_ryan_~~"
--- Result >< Strikethrough [Italic [Text "ryan"]]
-strikethrough :: Parser ADT
-strikethrough = Strikethrough <$> nestedBetween "~~"
-
--- >>> parse link "[**ryan**](https://ryan.com)"
--- Result >< Link [Bold [Text "ryan"]] "https://ryan.com"
-link :: Parser ADT
-link = liftA2 Link (nestedbetweenTwo "[" "]") (inlineSpace *> betweenTwo "(" ")")
-
--- >>> parse inlineCode "`ryan`"
--- Result >< InlineCode "ryan"
-inlineCode :: Parser ADT
-inlineCode = InlineCode <$> between "`"
-
--- >>> parse footnote' "[^1 ]"
-footnote' :: Parser Int
-footnote' = inlineSpace *> string "[^" *> positiveInt <* is ']'
-
-footnote :: Parser ADT
-footnote = Footnote <$> footnote'
-
--- | -------------------------------------------------
--- | -------------------- Image ----------------------
--- | -------------------------------------------------
-
--- can there be whitespace between ] and (?
--- what about whitespace between " and )?
--- >>> parse image "![Alt text](/path/to/img.jpg \"Optional title\")"
--- Result >< Image "Alt text" "/path/to/img.jpg" "Optional title"
 image :: Parser ADT
 image =
   liftA3
     Image
     (inlineSpace *> is '!' *> isNotWhitespace *> betweenTwo "[" "]")
-    (inlineSpace *> betweenTwo "(" " \"")
-    (someCharTill (is '"') <* is ')')
+    (betweenTwo "(" " \"")
+    (someCharTill (string "\")"))
 
--- | -------------------------------------------------
--- | -------------- Footnote Reference ---------------
--- | -------------------------------------------------
 
--- >>> parse footnoteReference "[^1]: My reference.\n[^2]:Another reference.\n[^3]:  The 2 spaces after the colon should be ignored"
--- >>> parse footnoteReference "[^1]: My reference."
--- Result >
--- [^2]:Another reference.
--- [^3]:  The 2 spaces after the colon should be ignored< FootnoteReference 1 "My reference."
--- Result >< FootnoteReference 1 "My reference."
+--- Footnote Reference ---
+
 footnoteReference :: Parser ADT
-footnoteReference = liftA2 FootnoteReference footnote' (charTok ':' *> some (isNot '\n'))
+footnoteReference = liftA2 FootnoteReference (inlineSpace *> footnote') (charTok ':' *> some (isNot '\n'))
 
--- | -------------------------------------------------
--- | ------------------ Free Text --------------------
--- | -------------------------------------------------
--- modifiers :: [Parser ADT]
--- modifiers = [italic, bold, strikethrough, link, inlineCode, footnote]
 
--- text' :: String -> Parser Char
--- text' a = Parser f
---   where
---     f "" = Error UnexpectedEof
---     f (x : _) | x `elem` a = Error $ UnexpectedString "Break character found"
---     f input@(x : xs) = case parse (asum modifiers) input of
---       Result _ _ -> Error $ UnexpectedString "Text modifiers are not allowed in free text"
---       Error _ -> Result xs x
+---- Free Text ----
 
--- >>> parse text "Here is some **markdown**"
--- Result >**markdown**< Text "Here is some "
--- text :: String -> Parser ADT
--- text a = Text <$> some (text' a)
+freeText :: Parser ADT
+freeText = FreeText <$> freeText' "\n"
+
+
+---- Free Text Helpers ----
+
+text' :: String -> Parser Char
+text' a = Parser f
+  where
+    f "" = Error UnexpectedEof
+    f (x : _) | x `elem` a = Error $ UnexpectedString "Break character found"
+    f input@(x : xs) = case parse (asum modifiers) input of
+      Result _ _ -> Error $ UnexpectedString "Text modifier found"
+      Error _ -> Result xs x
+
+text :: String -> Parser ADT
+text a = Text <$> some (text' a)
 
 freeText' :: String -> Parser [ADT]
 freeText' a = some (text a <|> asum modifiers)
 
--- >>> parse freeText "_hey_ Here is some *markdown**"
--- Result >< FreeText [Italic "hey",Text " Here is some *markdown**"]
-freeText :: Parser ADT
-freeText = FreeText <$> freeText' "\n"
 
--- | -------------------------------------------------
--- | ------------------- Heading ---------------------
--- | -------------------------------------------------
+---- Heading ----
+
+heading :: Parser ADT
+heading = liftA2 Heading checkHash (space *> freeText' "\n")
+          <|>
+          liftA2 (flip Heading) (freeText' "\n" <* charTok '\n') checkHeadingSep
+
+
+---- Heading Helpers ----
+
+checkHash :: Parser Int
+checkHash = do
+  hashes <- inlineSpace *> some (is '#')
+  guard (length hashes <= 6) <|> unexpectedStringParser "Too many hashes"
+  return $ length hashes
+
 checkHeadingSep :: Parser Int
 checkHeadingSep = do
   seps <- atLeast 2 '=' <|> atLeast 2 '-'
   _ <- inlineSpace *> isEnd
   return $ if head seps == '=' then 1 else 2
 
-checkHash :: Parser Int
-checkHash = do
-  hashes <- inlineSpace *> some (is '#')
-  guard (length hashes <= 6) <|> unexpectedStringParser hashes
-  return $ length hashes
 
-heading :: Parser ADT
-heading = liftA2 Heading checkHash (space *> freeText' "\n") <|> flip Heading <$> (freeText' "\n" <* charTok '\n') <*> checkHeadingSep
+---- Blockquote ----
 
--- | -------------------------------------------------
--- | ------------------ Blockquote -------------------
--- | -------------------------------------------------
-
--- >>> parse blockquote "> This is a block quote.\n> It can **span** multiple lines.\n"
--- Result >< Blockquote [FreeText [Text "This is a block quote."],FreeText [Text "It can ",Bold "span",Text " multiple lines."]]
 blockquote :: Parser ADT
 blockquote = Blockquote <$> some (inlineSpace *> charTok '>' *> freeText <* optional (is '\n'))
 
--- | -------------------------------------------------
--- | --------------------- Code ----------------------
--- | -------------------------------------------------
 
--- does the closing ``` have to be in a new line?
--- >>> parse code "```haskell\nblockquote\n``````\nblockquote\n```\n"
--- >>> parse code "```haskell\nmain :: IO ()\nmain = do\n    putStrLn \"Never gonna give you up\"\n    putStrLn \"Never gonna let you down\"\n    putStrLn \"Never gonna run around and desert you\"\n```\n"
--- Result >
--- < Code "haskell" "blockquote\n``````\nblockquote"
--- Result >
--- < Code "haskell" "main :: IO ()\nmain = do\n    putStrLn \"Never gonna give you up\"\n    putStrLn \"Never gonna let you down\"\n    putStrLn \"Never gonna run around and desert you\""
+---- Code ----
+
 code :: Parser ADT
 code = do
   language <- inlineSpace *> openingTag "```" *> manyCharTill (is '\n')
   body <- someCharTill (string "\n```" <* isEnd)
   return $ Code language body
 
--- code = liftA2 Code (inlineSpace *> openingTag "```" *> manyTill (isNot '\n') (string "\n```")) (content "\n```" <* (eof <|> is '\n' $> ()))
 
--- | -------------------------------------------------
--- | ----------------- Ordered List ------------------
--- | -------------------------------------------------
+---- Ordered List ----
+
+orderedList :: Parser ADT
+orderedList = isNotWhitespace *> orderedList' 0
+
+
+--- Ordered List Helpers ---
+
 nestedList :: Int -> Parser ADT
 nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 
--- need to check > 1?
 listContent :: Int -> Parser ADT
 listContent n = string (replicate n ' ') *> positiveInt *> string ". " *> (Item <$> freeText' "\n")
 
@@ -260,23 +203,22 @@ orderedList' n = do
   restList <- many (list n)
   return $ OrderedList (headList : restList)
 
--- >>> parse orderedList "1. Item 1\n    1. Sub Item 1\n    2. Sub Item 2\n        1. Sub Sub Item 1\n2. **Bolded** Item 2\n6. Item 3\n7. Item 4"
--- Result >< OrderedList [Item [Text "Item 1"],OrderedList [Item [Text "Sub Item 1"],Item [Text "Sub Item 2"],OrderedList [Item [Text "Sub Sub Item 1"]]],Item [Bold [Text "Bolded"],Text " Item 2"],Item [Text "Item 3"],Item [Text "Item 4"]]
-orderedList :: Parser ADT
-orderedList = isNotWhitespace *> orderedList' 0
 
--- | -------------------------------------------------
--- | -------------------- Table ----------------------
--- | -------------------------------------------------
+---- Table ----
 
--- >>> parse cell "a |"
--- Result > |< Text "a"
+table :: Parser ADT
+table = do
+  header <- inlineSpace *> row
+  _ <- checkTableSep (length header)
+  body <- Body <$> some (row >>= checkNCol (length header))
+  return $ Table (Header header) body
+
+
+---- Table Helpers ----
+
 cell :: Parser ADT
 cell = Text <$> some (lookAhead (inlineSpace *> isNot '|') *> is ' ' <|> text' "|\n ")
 
--- >>> parse row "| Tables    **bold**    |Are| Cool  |\n| ------------- | ------------- | ----- |\n|"
--- Result >| ------------- | ------------- | ----- |
--- |< [[Text "Tables    ",Bold [Text "bold"]],[Text "Are"],[Text "Cool"]]
 row :: Parser [[ADT]]
 row = sepBy1 (some (asum modifiers <|> cell)) (inlineSpace *> charTok '|')
 
@@ -285,56 +227,42 @@ checkNCol nCol values = do
   guard (length values == nCol) <|> unexpectedStringParser "Number of columns in table header and row do not match"
   return values
 
--- >>> parse (checkTableSep 3) "| ------------- | ------------- | ----- |\n|"
--- Result >|< ["---","---","---"]
 checkTableSep :: Int -> Parser [String]
 checkTableSep nCol = do
   sep <- sepBy1 (inlineSpace *> atLeast 3 '-') (inlineSpace *> charTok '|')
   checkNCol nCol sep
 
--- >>> parse table "  | Tables    **bold**    |Are| Cool  |\n| ------------- | ------------- | ----- |\n| here          | is            | data  |\n| here          | is            | data  |\n| here | is also | **bolded data** |\n| also | part of the | table |"
--- Result >< Table (Header [[Text "Tables    ",Bold [Text "bold"]],[Text "Are"],[Text "Cool"]]) (Body [[[Text "here"],[Text "is"],[Text "data"]],[[Text "here"],[Text "is"],[Text "data"]],[[Text "here"],[Text "is also"],[Bold [Text "bolded data"]]],[[Text "also"],[Text "part of the"],[Text "table"]]])
-table :: Parser ADT
-table = do
-  header <- inlineSpace *> row
-  _ <- checkTableSep (length header)
-  body <- Body <$> some (row >>= checkNCol (length header))
-  return $ Table (Header header) body
 
--- | -------------------------------------------------
--- | ------------------ Conversion -------------------
--- | -------------------------------------------------
+---- Conversion ----
+
+reverseInput :: Parser String
+reverseInput = Parser $ \input -> Result (reverse input) ""
+
+trim :: Parser String
+trim = spaces *> reverseInput <* spaces *> reverseInput
+
 newline :: Parser ADT
 newline = NewLine <$> charTok '\n'
 
 markdownElement :: Parser [ADT]
-markdownElement = some (asum ([newline, image, footnoteReference, heading, blockquote, code, orderedList, table] ++ modifiers ++ [freeText]))
+markdownElement = some (asum [newline, image, footnoteReference, heading, blockquote, code, orderedList, table, freeText])
 
--- >>> parse reverseInput "abc  "
--- Result >  cba< ""
-reverseInput :: Parser String
-reverseInput = Parser $ \input -> Result (reverse input) ""
-
--- >>> parse trimTrailingWhitespace "abcs sdsd \n \t "
--- Result >abcs sdsd< ""
-trimTrailingWhitespace :: Parser String
-trimTrailingWhitespace = reverseInput <* spaces *> reverseInput
-
+-- >>> parse markdownParser "**test**"
+-- Result >< Markdown [FreeText [Bold [Text "test"]]]
 markdownParser :: Parser ADT
-markdownParser = Markdown <$> (spaces *> trimTrailingWhitespace *> markdownElement)
+markdownParser = Markdown <$> (trim *> markdownElement)
 
 getTime :: IO String
 getTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S" <$> getCurrentTime
+
+indent :: Int -> String -> String
+indent n = unlines . map (replicate n ' ' ++) . lines
 
 tag :: String -> String -> String
 tag t c = "<" ++ t ++ ">" ++ c ++ "</" ++ t ++ ">"
 
 block :: String -> String -> String
 block t c = indent 4 ("<" ++ t ++ ">") ++ indent 4 c ++ indent 4 ("</" ++ t ++ ">")
-
--- Helper to indent content by `n` spaces and add a newline at the end
-indent :: Int -> String -> String
-indent n = unlines . map (replicate n ' ' ++) . lines
 
 convertADTHTMLwithTitle :: String -> ADT -> String
 convertADTHTMLwithTitle title (Markdown adt) = convertMarkdown (Just title) adt
@@ -413,7 +341,6 @@ convertItem adt = indent 4 (tag "li" (concatMap convertADTHTML adt))
 convertOrderedList :: [ADT] -> String
 convertOrderedList adt = block "ol" (concatMap convertADTHTML adt)
 
--- Convert the entire table (header and body)
 convertTable :: ADT -> ADT -> String
 convertTable headerRows bodyRows = block "table" (convertADTHTML headerRows ++ convertADTHTML bodyRows)
 
@@ -423,10 +350,8 @@ convertHeader = convertRow "th"
 convertBody :: [[[ADT]]] -> String
 convertBody = concatMap (convertRow "td")
 
--- Convert a single row of ADT cells into a <tr> with <td> tags
 convertRow :: String -> [[ADT]] -> String
 convertRow t r = block "tr" (concatMap (convertCell t) r)
 
--- Convert a single cell (list of ADTs) into a <td> tag
 convertCell :: String -> [ADT] -> String
 convertCell t c = indent 4 (tag t (concatMap convertADTHTML c))
