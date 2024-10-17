@@ -45,7 +45,10 @@ main = scotty 3000 $ do
   post "/api/saveHTML" $ do
     requestBody <- body
     let html = unpack $ decodeUtf8 requestBody
+    -- Get the current time as a string
     currentTime <- liftIO getTime
+    -- Specify the directory and file name to save the HTML file
     let dir = "out"
     let fileName = dir ++ "/" ++ currentTime ++ ".html"
+    -- Write the HTML to the file
     liftIO $ writeFile fileName html
