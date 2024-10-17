@@ -23,7 +23,7 @@ data ADT
   | Heading Int [ADT]
   | Blockquote [ADT]
   | Code String String
-  | Item [ADT] [ADT]
+  | Item [ADT]
   | OrderedList [ADT]
   | Header [[ADT]]
   | Body [[[ADT]]]
@@ -247,7 +247,7 @@ nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 
 -- need to check > 1?
 listContent :: Int -> Parser ADT
-listContent n = string (replicate n ' ') *> positiveInt *> string ". " *> (flip Item [] <$> freeText' "\n")
+listContent n = string (replicate n ' ') *> positiveInt *> string ". " *> (Item <$> freeText' "\n")
 
 list :: Int -> Parser ADT
 list = (is '\n' *>) . liftA2 (<|>) nestedList listContent
@@ -256,15 +256,12 @@ orderedList' :: Int -> Parser ADT
 orderedList' n = do
   number <- positiveInt
   guard (number == 1) <|> unexpectedStringParser "Number must be 1"
-  headList <- string ". " *> freeText' "\n"
+  headList <- Item <$> (string ". " *> freeText' "\n")
   restList <- many (list n)
-  return $ processRestList restList headList
-  where
-    processRestList (OrderedList nested : xs) headList = OrderedList (Item headList [OrderedList nested] : xs)
-    processRestList xs headList = OrderedList (Item headList [] : xs)
+  return $ OrderedList (headList : restList)
 
--- >>> parse orderedList "1. Item 1\n    1. Sub Item 1\n    2. Sub Item 2\n    3. Sub Item 3\n2. **Bolded** Item 2\n6. Item 3\n7. Item 4"
--- Result >< OrderedList [Item [Text "Item 1"] [OrderedList [Item [Text "Sub Item 1"] [],Item [Text "Sub Item 2"] [],Item [Text "Sub Item 3"] []]],Item [Bold [Text "Bolded"],Text " Item 2"] [],Item [Text "Item 3"] [],Item [Text "Item 4"] []]
+-- >>> parse orderedList "1. Item 1\n    1. Sub Item 1\n    2. Sub Item 2\n        1. Sub Sub Item 1\n2. **Bolded** Item 2\n6. Item 3\n7. Item 4"
+-- Result >< OrderedList [Item [Text "Item 1"],OrderedList [Item [Text "Sub Item 1"],Item [Text "Sub Item 2"],OrderedList [Item [Text "Sub Sub Item 1"]]],Item [Bold [Text "Bolded"],Text " Item 2"],Item [Text "Item 3"],Item [Text "Item 4"]]
 orderedList :: Parser ADT
 orderedList = isNotWhitespace *> orderedList' 0
 
@@ -359,7 +356,7 @@ convertADTHTML (FreeText adt) = convertFreeText adt
 convertADTHTML (Heading n adt) = convertHeading n adt
 convertADTHTML (Blockquote adt) = convertBlockquote adt
 convertADTHTML (Code language c) = convertCode language c
-convertADTHTML (Item adt nested) = convertItem adt nested
+convertADTHTML (Item adt) = convertItem adt
 convertADTHTML (OrderedList adt) = convertOrderedList adt
 convertADTHTML (Header adt) = convertHeader adt
 convertADTHTML (Body adt) = convertBody adt
@@ -410,9 +407,8 @@ convertBlockquote adt = block "blockquote" (concatMap convertADTHTML adt)
 convertCode :: String -> String -> String
 convertCode language c = replicate 4 ' ' ++ tag "pre" ("<code class=\"language-" ++ language ++ "\">" ++ c ++ "</code>") ++ "\n"
 
-convertItem :: [ADT] -> [ADT] -> String
-convertItem adt [] = indent 4 (tag "li" (concatMap convertADTHTML adt))
-convertItem adt nested = indent 4 (tag "li" (concatMap convertADTHTML adt ++ "\n" ++ concatMap convertADTHTML nested))
+convertItem :: [ADT] -> String
+convertItem adt = indent 4 (tag "li" (concatMap convertADTHTML adt))
 
 convertOrderedList :: [ADT] -> String
 convertOrderedList adt = block "ol" (concatMap convertADTHTML adt)
