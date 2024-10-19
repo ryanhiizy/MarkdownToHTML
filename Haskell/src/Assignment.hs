@@ -132,12 +132,6 @@ freeText = FreeText <$> freeText'
 
 ---- Free Text Helpers ----
 
-anyChar :: Parser ADT
-anyChar = do
-  c <- isNot '\n'
-  rest <- many (text' tagsArr)
-  return $ Text (c : rest)
-
 tagsArr :: [String]
 tagsArr = ["\n", "_", "**", "~~", "[", "`", "[^", "![", "|"]
 
@@ -153,7 +147,8 @@ text :: [String] -> Parser ADT
 text tags = Text <$> some (text' tags)
 
 freeText' :: Parser [ADT]
-freeText' = some (asum modifiers <|> text tagsArr <|> anyChar)
+freeText' = some (asum modifiers <|> text tagsArr <|>
+             (Text . (:[]) <$> isNot '\n'))
 
 
 ---- Heading ----
