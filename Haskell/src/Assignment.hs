@@ -175,7 +175,7 @@ checkHeadingSep = do
 ---- Blockquote ----
 
 blockquote :: Parser ADT
-blockquote = Blockquote <$> some (inlineSpace *> charTok '>' *> freeText <* optional (is '\n'))
+blockquote = Blockquote <$> some (optional (is '\n') *> inlineSpace *> charTok '>' *> freeText)
 
 
 ---- Code ----
