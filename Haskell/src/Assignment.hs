@@ -8,6 +8,7 @@ import Data.Time.Format (defaultTimeLocale, formatTime)
 import Instances (ParseError (..), ParseResult (..), Parser (..))
 import Parser (atLeast, charTok, inlineSpace, is, isEnd, isNot, isNotWhitespace, positiveInt, lookAhead, manyCharTill, sepBy1, someCharTill, space, spaces, string, unexpectedStringParser, someTill)
 import Data.Maybe (fromMaybe)
+import Data.List (isPrefixOf)
 
 data ADT
   = Italic [ADT]
@@ -28,7 +29,7 @@ data ADT
   | Header [[ADT]]
   | Body [[[ADT]]]
   | Table ADT ADT
-  | NewLine Char
+  | Newline Int
   | Markdown [ADT]
   deriving (Show, Eq)
 
@@ -119,33 +120,41 @@ footnoteReference = liftA2 FootnoteReference (inlineSpace *> footnote') (charTok
 ---- Free Text ----
 
 freeText :: Parser ADT
-freeText = FreeText <$> freeText' "\n"
+freeText = FreeText <$> freeText'
 
 
 ---- Free Text Helpers ----
 
-text' :: String -> Parser Char
-text' a = Parser f
+tagsArr :: [String]
+tagsArr = ["\n", "_", "**", "~~", "[", "`", "[^", "![", "|"]
+
+anyChar :: Parser ADT
+anyChar = do
+  c <- isNot '\n'
+  rest <- many (text' tagsArr)
+  return $ Text (c : rest)
+
+text' :: [String] -> Parser Char
+text' tags = Parser f
   where
     f "" = Error UnexpectedEof
-    f (x : _) | x `elem` a = Error $ UnexpectedString "Break character found"
-    f input@(x : xs) = case parse (asum modifiers) input of
-      Result _ _ -> Error $ UnexpectedString "Text modifier found"
-      Error _ -> Result xs x
+    f input@(x : xs)
+      | any (`isPrefixOf` input) tags = Error $ UnexpectedString "Text modifiers found"
+      | otherwise = Result xs x
 
-text :: String -> Parser ADT
-text a = Text <$> some (text' a)
+text :: [String] -> Parser ADT
+text tags = Text <$> some (text' tags)
 
-freeText' :: String -> Parser [ADT]
-freeText' a = some (text a <|> asum modifiers)
+freeText' :: Parser [ADT]
+freeText' = some (asum modifiers <|> text tagsArr <|> anyChar)
 
 
 ---- Heading ----
 
 heading :: Parser ADT
-heading = liftA2 Heading checkHash (space *> freeText' "\n")
+heading = liftA2 Heading checkHash (space *> freeText')
           <|>
-          liftA2 (flip Heading) (freeText' "\n" <* charTok '\n') checkHeadingSep
+          liftA2 (flip Heading) (freeText' <* charTok '\n') checkHeadingSep
 
 
 ---- Heading Helpers ----
@@ -190,7 +199,7 @@ nestedList :: Int -> Parser ADT
 nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 
 listContent :: Int -> Parser ADT
-listContent n = string (replicate n ' ') *> positiveInt *> string ". " *> (Item <$> freeText' "\n")
+listContent n = string (replicate n ' ') *> positiveInt *> string ". " *> (Item <$> freeText')
 
 list :: Int -> Parser ADT
 list = (is '\n' *>) . liftA2 (<|>) nestedList listContent
@@ -199,7 +208,7 @@ orderedList' :: Int -> Parser ADT
 orderedList' n = do
   number <- positiveInt
   guard (number == 1) <|> unexpectedStringParser "Number must be 1"
-  headList <- Item <$> (string ". " *> freeText' "\n")
+  headList <- Item <$> (string ". " *> freeText')
   restList <- many (list n)
   return $ OrderedList (headList : restList)
 
@@ -217,10 +226,10 @@ table = do
 ---- Table Helpers ----
 
 cell :: Parser ADT
-cell = Text <$> some (lookAhead (inlineSpace *> isNot '|') *> is ' ' <|> text' "|\n ")
+cell = Text <$> some (lookAhead (inlineSpace *> isNot '|') *> is ' ' <|> text' (tagsArr ++ [" "]))
 
 row :: Parser [[ADT]]
-row = sepBy1 (some (asum modifiers <|> cell)) (inlineSpace *> charTok '|')
+row = sepBy1 (inlineSpace *> some (asum modifiers <|> cell)) (optional (is '\n') *> inlineSpace *> is '|')
 
 checkNCol :: Int -> [a] -> Parser [a]
 checkNCol nCol values = do
@@ -229,7 +238,7 @@ checkNCol nCol values = do
 
 checkTableSep :: Int -> Parser [String]
 checkTableSep nCol = do
-  sep <- sepBy1 (inlineSpace *> atLeast 3 '-') (inlineSpace *> charTok '|')
+  sep <- sepBy1 (inlineSpace *> atLeast 3 '-') (optional (is '\n') *> inlineSpace *> is '|')
   checkNCol nCol sep
 
 
@@ -242,13 +251,13 @@ trim :: Parser String
 trim = spaces *> reverseInput <* spaces *> reverseInput
 
 newline :: Parser ADT
-newline = NewLine <$> charTok '\n'
+newline = do
+  n <- some (is '\n')
+  return $ Newline (length n)
 
 markdownElement :: Parser [ADT]
 markdownElement = some (asum [newline, image, footnoteReference, heading, blockquote, code, orderedList, table, freeText])
 
--- >>> parse markdownParser "**test**"
--- Result >< Markdown [FreeText [Bold [Text "test"]]]
 markdownParser :: Parser ADT
 markdownParser = Markdown <$> (trim *> markdownElement)
 
@@ -270,7 +279,7 @@ convertADTHTMLwithTitle _ _ = "Invalid Input"
 
 convertADTHTML :: ADT -> String
 convertADTHTML (Markdown adt) = convertMarkdown Nothing adt
-convertADTHTML (NewLine _) = ""
+convertADTHTML (Newline n) = convertNewline n
 convertADTHTML (Italic i) = convertItalic i
 convertADTHTML (Bold b) = convertBold b
 convertADTHTML (Strikethrough s) = convertStrikethrough s
@@ -299,6 +308,11 @@ convertMarkdown maybeTitle adt =
      ++ concatMap convertADTHTML adt
      ++ "</body>\n\n</html>\n"
 
+convertNewline :: Int -> String
+convertNewline n
+  | n == 1 = ""
+  | otherwise = indent 4 (tag "p" "")
+
 convertItalic :: [ADT] -> String
 convertItalic = tag "em" . concatMap convertADTHTML
 
@@ -309,13 +323,13 @@ convertStrikethrough :: [ADT] -> String
 convertStrikethrough = tag "del" . concatMap convertADTHTML
 
 convertLink :: [ADT] -> String -> String
-convertLink adt url = "<a href=\"" ++ url ++ "\">" ++ concatMap convertADTHTML adt ++ "</a>\n"
+convertLink adt url = "<a href=\"" ++ url ++ "\">" ++ concatMap convertADTHTML adt ++ "</a>"
 
 convertInlineCode :: String -> String
 convertInlineCode = tag "code"
 
 convertFootnote :: Int -> String
-convertFootnote n = "<sup><a id=\"fn" ++ show n ++ "ref\" href=\"#fn" ++ show n ++ "\">" ++ show n ++ "</a></sup>\n"
+convertFootnote n = tag "sup" ("<a id=\"fn" ++ show n ++ "ref\" href=\"#fn" ++ show n ++ "\">" ++ show n ++ "</a>")
 
 convertImage :: String -> String -> String -> String
 convertImage alt src title = indent 4 (tag "p" ("<img src=\"" ++ src ++ "\" alt=\"" ++ alt ++ "\" title=\"" ++ title ++ "\">"))
@@ -333,6 +347,7 @@ convertBlockquote :: [ADT] -> String
 convertBlockquote adt = block "blockquote" (concatMap convertADTHTML adt)
 
 convertCode :: String -> String -> String
+convertCode "" c = replicate 4 ' ' ++ tag "pre" ("<code>" ++ c ++ "</code>") ++ "\n"
 convertCode language c = replicate 4 ' ' ++ tag "pre" ("<code class=\"language-" ++ language ++ "\">" ++ c ++ "</code>") ++ "\n"
 
 convertItem :: [ADT] -> String
