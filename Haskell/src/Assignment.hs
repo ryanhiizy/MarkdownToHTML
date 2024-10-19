@@ -1,12 +1,15 @@
 module Assignment (markdownParser, convertADTHTML, getTime, convertADTHTMLwithTitle) where
 
-import Control.Applicative (Alternative (..), Applicative (liftA2), liftA3, optional)
+import Control.Applicative (Alternative (..), Applicative (liftA2), liftA3,
+                            optional)
 import Control.Monad (guard)
 import Data.Foldable (asum)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Instances (ParseError (..), ParseResult (..), Parser (..))
-import Parser (atLeast, charTok, inlineSpace, is, isEnd, isNot, isNotWhitespace, positiveInt, lookAhead, manyCharTill, sepBy1, someCharTill, space, spaces, string, unexpectedStringParser, someTill)
+import Parser (atLeast, charTok, inlineSpace, is, isEnd, isNot, isNotWhitespace,
+              positiveInt, lookAhead, manyCharTill, sepBy1, someCharTill, space,
+              spaces, string, unexpectedStringParser, someTill)
 import Data.Maybe (fromMaybe)
 import Data.List (isPrefixOf)
 
@@ -49,7 +52,10 @@ strikethrough :: Parser ADT
 strikethrough = Strikethrough <$> nestedBetween "~~"
 
 link :: Parser ADT
-link = liftA2 Link (nestedbetweenTwo "[" "]") (inlineSpace *> betweenTwo "(" ")")
+link = liftA2
+        Link
+        (nestedbetweenTwo "[" "]")
+        (inlineSpace *> betweenTwo "(" ")")
 
 inlineCode :: Parser ADT
 inlineCode = InlineCode <$> between "`"
@@ -103,18 +109,19 @@ nestedbetweenTwo opening closing = do
 ---- Image ----
 
 image :: Parser ADT
-image =
-  liftA3
-    Image
-    (inlineSpace *> is '!' *> isNotWhitespace *> betweenTwo "[" "]")
-    (betweenTwo "(" " \"")
-    (someCharTill (string "\")"))
+image = liftA3
+          Image
+          (inlineSpace *> is '!' *> isNotWhitespace *> betweenTwo "[" "]")
+          (betweenTwo "(" " \"")
+          (someCharTill (string "\")"))
 
 
 --- Footnote Reference ---
 
 footnoteReference :: Parser ADT
-footnoteReference = liftA2 FootnoteReference (inlineSpace *> footnote') (charTok ':' *> some (isNot '\n'))
+footnoteReference = liftA2
+                      FootnoteReference (inlineSpace *> footnote')
+                      (charTok ':' *> some (isNot '\n'))
 
 
 ---- Free Text ----
@@ -125,14 +132,14 @@ freeText = FreeText <$> freeText'
 
 ---- Free Text Helpers ----
 
-tagsArr :: [String]
-tagsArr = ["\n", "_", "**", "~~", "[", "`", "[^", "![", "|"]
-
 anyChar :: Parser ADT
 anyChar = do
   c <- isNot '\n'
   rest <- many (text' tagsArr)
   return $ Text (c : rest)
+
+tagsArr :: [String]
+tagsArr = ["\n", "_", "**", "~~", "[", "`", "[^", "![", "|"]
 
 text' :: [String] -> Parser Char
 text' tags = Parser f
@@ -175,7 +182,9 @@ checkHeadingSep = do
 ---- Blockquote ----
 
 blockquote :: Parser ADT
-blockquote = Blockquote <$> some (optional (is '\n') *> inlineSpace *> charTok '>' *> freeText)
+blockquote = Blockquote
+              <$> some (optional (is '\n')
+              *> inlineSpace *> charTok '>' *> freeText)
 
 
 ---- Code ----
@@ -199,7 +208,10 @@ nestedList :: Int -> Parser ADT
 nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 
 listContent :: Int -> Parser ADT
-listContent n = string (replicate n ' ') *> positiveInt *> string ". " *> (Item <$> freeText')
+listContent n = string (replicate n ' ')
+                *> positiveInt
+                *> string ". "
+                *> (Item <$> freeText')
 
 list :: Int -> Parser ADT
 list = (is '\n' *>) . liftA2 (<|>) nestedList listContent
@@ -226,10 +238,14 @@ table = do
 ---- Table Helpers ----
 
 cell :: Parser ADT
-cell = Text <$> some (lookAhead (inlineSpace *> isNot '|') *> is ' ' <|> text' (tagsArr ++ [" "]))
+cell = Text
+        <$> some (lookAhead (inlineSpace *> isNot '|') *> is ' '
+        <|> text' (tagsArr ++ [" "]))
 
 row :: Parser [[ADT]]
-row = sepBy1 (inlineSpace *> some (asum modifiers <|> cell)) (optional (is '\n') *> inlineSpace *> is '|')
+row = sepBy1
+        (inlineSpace *> some (asum modifiers <|> cell))
+        (optional (is '\n') *> inlineSpace *> is '|')
 
 checkNCol :: Int -> [a] -> Parser [a]
 checkNCol nCol values = do
@@ -238,7 +254,9 @@ checkNCol nCol values = do
 
 checkTableSep :: Int -> Parser [String]
 checkTableSep nCol = do
-  sep <- sepBy1 (inlineSpace *> atLeast 3 '-') (optional (is '\n') *> inlineSpace *> is '|')
+  sep <- sepBy1
+          (inlineSpace *> atLeast 3 '-')
+          (optional (is '\n') *> inlineSpace *> is '|')
   checkNCol nCol sep
 
 
@@ -255,8 +273,12 @@ newline = do
   n <- some (is '\n')
   return $ Newline (length n)
 
+markdown :: [Parser ADT]
+markdown = [newline, image, footnoteReference, heading,
+            blockquote, code, orderedList, table, freeText]
+
 markdownElement :: Parser [ADT]
-markdownElement = some (asum [newline, image, footnoteReference, heading, blockquote, code, orderedList, table, freeText])
+markdownElement = some (asum markdown)
 
 markdownParser :: Parser ADT
 markdownParser = Markdown <$> (trim *> markdownElement)
@@ -271,7 +293,8 @@ tag :: String -> String -> String
 tag t c = "<" ++ t ++ ">" ++ c ++ "</" ++ t ++ ">"
 
 block :: String -> String -> String
-block t c = indent 4 ("<" ++ t ++ ">") ++ indent 4 c ++ indent 4 ("</" ++ t ++ ">")
+block t c = indent 4 ("<" ++ t ++ ">") ++ indent 4 c
+            ++ indent 4 ("</" ++ t ++ ">")
 
 convertADTHTMLwithTitle :: String -> ADT -> String
 convertADTHTMLwithTitle title (Markdown adt) = convertMarkdown (Just title) adt
@@ -287,7 +310,7 @@ convertADTHTML (Link l url) = convertLink l url
 convertADTHTML (InlineCode inline) = convertInlineCode inline
 convertADTHTML (Footnote n) = convertFootnote n
 convertADTHTML (Image alt src title) = convertImage alt src title
-convertADTHTML (FootnoteReference n reference) = convertFootnoteReference n reference
+convertADTHTML (FootnoteReference n ref) = convertFootnoteReference n ref
 convertADTHTML (Text t) = t
 convertADTHTML (FreeText adt) = convertFreeText adt
 convertADTHTML (Heading n adt) = convertHeading n adt
@@ -323,32 +346,41 @@ convertStrikethrough :: [ADT] -> String
 convertStrikethrough = tag "del" . concatMap convertADTHTML
 
 convertLink :: [ADT] -> String -> String
-convertLink adt url = "<a href=\"" ++ url ++ "\">" ++ concatMap convertADTHTML adt ++ "</a>"
+convertLink adt url = "<a href=\"" ++ url ++ "\">"
+                      ++ concatMap convertADTHTML adt ++ "</a>"
 
 convertInlineCode :: String -> String
 convertInlineCode = tag "code"
 
 convertFootnote :: Int -> String
-convertFootnote n = tag "sup" ("<a id=\"fn" ++ show n ++ "ref\" href=\"#fn" ++ show n ++ "\">" ++ show n ++ "</a>")
+convertFootnote n = tag "sup" ("<a id=\"fn" ++ show n ++ "ref\" href=\"#fn"
+                    ++ show n ++ "\">" ++ show n ++ "</a>")
 
 convertImage :: String -> String -> String -> String
-convertImage alt src title = indent 4 (tag "p" ("<img src=\"" ++ src ++ "\" alt=\"" ++ alt ++ "\" title=\"" ++ title ++ "\">"))
+convertImage alt src title = indent 4 (tag "p" ("<img src=\"" ++ src
+                              ++ "\" alt=\"" ++ alt ++ "\" title=\""
+                              ++ title ++ "\">"))
 
 convertFootnoteReference :: Int -> String -> String
-convertFootnoteReference n reference = indent 4 ("<p id=\"fn" ++ show n ++ "\">" ++ reference ++ "</p>")
+convertFootnoteReference n reference = indent 4 ("<p id=\"fn" ++ show n
+                                        ++ "\">" ++ reference ++ "</p>")
 
 convertFreeText :: [ADT] -> String
 convertFreeText adt = indent 4 (tag "p" (concatMap convertADTHTML adt))
 
 convertHeading :: Int -> [ADT] -> String
-convertHeading n adt = indent 4 (tag ("h" ++ show n) (concatMap convertADTHTML adt))
+convertHeading n adt = indent 4
+                        (tag ("h" ++ show n)
+                        (concatMap convertADTHTML adt))
 
 convertBlockquote :: [ADT] -> String
 convertBlockquote adt = block "blockquote" (concatMap convertADTHTML adt)
 
 convertCode :: String -> String -> String
-convertCode "" c = replicate 4 ' ' ++ tag "pre" ("<code>" ++ c ++ "</code>") ++ "\n"
-convertCode language c = replicate 4 ' ' ++ tag "pre" ("<code class=\"language-" ++ language ++ "\">" ++ c ++ "</code>") ++ "\n"
+convertCode "" c = replicate 4 ' '
+                    ++ tag "pre" ("<code>" ++ c ++ "</code>") ++ "\n"
+convertCode language c = replicate 4 ' ' ++ tag "pre" ("<code class=\"language-"
+                          ++ language ++ "\">" ++ c ++ "</code>") ++ "\n"
 
 convertItem :: [ADT] -> String
 convertItem adt = indent 4 (tag "li" (concatMap convertADTHTML adt))
@@ -357,7 +389,8 @@ convertOrderedList :: [ADT] -> String
 convertOrderedList adt = block "ol" (concatMap convertADTHTML adt)
 
 convertTable :: ADT -> ADT -> String
-convertTable headerRows bodyRows = block "table" (convertADTHTML headerRows ++ convertADTHTML bodyRows)
+convertTable headerRows bodyRows = block "table" (convertADTHTML headerRows
+                                    ++ convertADTHTML bodyRows)
 
 convertHeader :: [[ADT]] -> String
 convertHeader = convertRow "th"
