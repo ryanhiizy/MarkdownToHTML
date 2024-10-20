@@ -1,0 +1,42 @@
+<Char>                 ::= (* one or more of any character except newline *)
+<Number>               ::= ( '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' )+
+<Text>                 ::= <Char>+
+<OptText>              ::= { <Char> }
+<Whitespace>           ::= ( '\t' | '\r' | '\f' | '\v' | ' ' )+
+<OptWhitespace>        ::= { <Whitespace> }
+<Indentation>          ::= { '    ' }
+<Newline>              ::= '\n'
+
+<Italic>               ::= '_' <FreeText> '_'
+<Bold>                 ::= '**' <FreeText> '**'
+<Strikethrough>        ::= '~~' <FreeText> '~~'
+<Link>                 ::= '[' <FreeText> ']' '(' <Text> ')'
+<InlineCode>           ::= '`' <Text> '`'
+<Footnote>             ::= '[^' <Number> ']'
+<Modifiers>            ::= ( <Italic> | <Bold> | <Strikethrough> |
+                             <Link> | <InlineCode> | <Footnote> )+
+
+<Image>                ::= '![' <Text> '](' <URL> <Whitespace> '"' <Text> '")'
+<FootnoteReference>    ::= <Footnote> ':' <OptWhitespace> <Text>
+<FreeText>             ::= <Text> | <Modifiers>
+<Heading1>             ::= '#' <Whitespace> <FreeText>
+<Heading2>             ::= '##' <Whitespace> <FreeText>
+<Heading3>             ::= '###' <Whitespace> <FreeText>
+<Heading4>             ::= '####' <Whitespace> <FreeText>
+<Heading5>             ::= '#####' <Whitespace> <FreeText>
+<Heading6>             ::= '######' <Whitespace> <FreeText>
+<AltHeading1>          ::= <FreeText> '\n' <OptWhitespace> '==' { '=' } <OptWhitespace> <EOL>
+<AltHeading2>          ::= <FreeText> '\n' <OptWhitespace> '--' { '-' } <OptWhitespace> <EOL>
+<Heading>              ::= <Heading1> | <Heading2> | <Heading3> | <Heading4> |
+                           <Heading5> | <Heading6> | <AltHeading1> | <AltHeading2>
+<Blockquote>           ::= '>' <OptWhitespace> <FreeText>
+<Code>                 ::= '```' <OptText> '\n' <Text> '\n```' <EOL>
+<ListItem>             ::= <Indentation> <Number> '.' <Whitespace> <FreeText> <EOL>
+<OrderedList>          ::= <ListItem> | <ListItem> <OrderedList>
+<TableCell>            ::= <FreeText>
+<TableRow>             ::= <TableCell>+ <EOL>
+<TableBody>            ::= <TableRow> | <TableRow> <TableBody>
+<TableHeader>          ::= <TableRow>
+<Table>                ::= <TableHeader> <TableBody>
+<Markdown>             ::= <Newline> | <Image> | <FootnoteReference> | <Heading> |
+                           <Blockquote> | <Code> | <OrderedList> | <Table> | <FreeText>
