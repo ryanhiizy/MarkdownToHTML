@@ -336,7 +336,7 @@ stringTok = tok . string
 unexpectedStringParser :: String -> Parser a
 unexpectedStringParser = Parser . const . Error . UnexpectedString
 
--- | Executes parser `a` until parser `b` succeeds zero or more times
+-- | Executes parser `p` until parser `end` succeeds zero or more times
 --
 -- >>> parse (manyTill (is 'a') (is 'b')) "aaaab"
 -- Result >< "aaaa"
@@ -345,9 +345,11 @@ unexpectedStringParser = Parser . const . Error . UnexpectedString
 manyTill :: Parser a -> Parser b -> Parser [a]
 manyTill p end = manyTill'
   where
+    -- Tries to parse the end parser, if it fails,
+    -- it will recursively parse the p parser to build the list
     manyTill' = (end $> []) <|> liftA2 (:) p manyTill'
 
--- | Executes parser `a` until parser `b` succeeds one or more times
+-- | Executes parser `p` until parser `end` succeeds one or more times
 --
 -- >>> isErrorResult (parse (someTill (is 'a') (is 'b')) "b")
 -- True
@@ -370,7 +372,7 @@ lookAhead :: Parser a -> Parser a
 lookAhead (Parser p) = Parser f
   where
     f input = case p input of
-      Result _ c -> Result input c
+      Result _ c -> Result input c -- Returns the result while keeping the input
       Error e -> Error e
 
 -- | Modified version of the traditional `sepBy1` that ensures the values are surrounded by the separator
@@ -406,6 +408,7 @@ isNotWhitespace = lookAhead (satisfy (not . isSpace))
 -- >>> isErrorResult (parse positiveInt "-1")
 -- True
 positiveInt :: Parser Int
+-- As long as it does not have a '-' sign, the int parser will handle the rest
 positiveInt = isNotWhitespace *> lookAhead (satisfy (/= '-')) *> int
 
 -- | Parses at least n of a given character, consuming extra occurrences of the character
