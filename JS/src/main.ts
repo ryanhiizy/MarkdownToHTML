@@ -49,7 +49,7 @@ const checkboxStream$: Observable<Action> = fromEvent(checkbox, "change").pipe(
     map((value) => (s) => ({ ...s, renderHTML: value })),
 );
 
-// Observable for title input field changes
+// Updates the title in the state when the title input changes
 const title$: Observable<Action> = fromEvent<KeyboardEvent>(
     titleInput,
     "input",
@@ -58,7 +58,7 @@ const title$: Observable<Action> = fromEvent<KeyboardEvent>(
     map((value) => (s) => ({ ...s, title: value })),
 );
 
-// Observable for the "Save HTML" button click
+// Sets the save flag to true when the save button is clicked
 const save$: Observable<Action> = fromEvent(saveButton, "click").pipe(
     map(() => (s) => ({ ...s, save: true })),
 );
@@ -71,32 +71,33 @@ function getHTML(s: State): Observable<State> {
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: s.title + "\n" + s.markdown,
+        body: s.title + "\n" + s.markdown, // Send the title and markdown as the body
     }).pipe(
         map((response) => response.response), // Extracting the response data
         map((data) => {
             return {
                 ...s,
-                HTML: data.html,
+                HTML: data.html, // Update the HTML in the state
             };
         }),
         first(),
     );
 }
 
-// Function to save the HTML to the backend using the current date and time
+// Sends a POST request to save the HTML
 function saveHTML(s: State): Observable<State> {
+    // Get the HTML as a stream
     return ajax({
-        url: "/api/saveHTML", // Send request to save the HTML
+        url: "/api/saveHTML", // Send request to saveHTML endpoint
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: s.HTML,
+        body: s.HTML, // Send the HTML as the body
     }).pipe(
         map(() => ({
             ...s,
-            save: false,
+            save: false, // Reset the save flag
         })),
     );
 }
@@ -121,6 +122,7 @@ function main() {
             mergeScan((acc: State, reducer: Action) => {
                 const newState = reducer(acc);
 
+                // If the save flag is set, save the HTML
                 if (newState.save) {
                     return saveHTML(newState);
                 }
@@ -129,9 +131,10 @@ function main() {
                 // so we `scan` and merge the result of getHTML in to our stream
                 return getHTML(newState);
             }, initialState),
-            map(resetState),
+            map(resetState), // Reset the state
         )
         .subscribe((value) => {
+            // Changes obtained from https://edstem.org/au/courses/16784/discussion/2255761
             const htmlOutput = document.getElementById(
                 "html-output",
             ) as HTMLTextAreaElement | null;
