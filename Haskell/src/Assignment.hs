@@ -171,7 +171,7 @@ freeText' = some (asum modifiers <|> text tagsArr <|>
 ---- Heading ----
 
 heading :: Parser ADT
-heading = liftA2 Heading checkHash (space *> freeText')
+heading = liftA2 Heading checkHash (oneof "\t\r\f\v " *> freeText')
           <|>
           -- For separator headings, the text is parsed before the separator,
           -- but the header level needs to be stored first, so flip is used.
