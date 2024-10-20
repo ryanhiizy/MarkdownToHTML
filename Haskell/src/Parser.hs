@@ -4,7 +4,7 @@
 module Parser where
 
 import Control.Applicative
-import Control.Monad (replicateM, void)
+import Control.Monad (replicateM, void, guard)
 import Data.Char
   ( isAlpha,
     isDigit,
@@ -405,11 +405,14 @@ isNotWhitespace = lookAhead (satisfy (not . isSpace))
 --
 -- >>> parse positiveInt "1"
 -- Result >< 1
--- >>> isErrorResult (parse positiveInt "-1")
+-- >>> isErrorResult (parse positiveInt "0")
 -- True
 positiveInt :: Parser Int
--- As long as it does not have a '-' sign, the int parser will handle the rest
-positiveInt = isNotWhitespace *> lookAhead (satisfy (/= '-')) *> int
+positiveInt = do
+  _ <- isNotWhitespace
+  n <- int
+  guard (n > 0) <|> unexpectedStringParser "Expected a positive integer"
+  return n
 
 -- | Parses at least n of a given character, consuming extra occurrences of the character
 --
