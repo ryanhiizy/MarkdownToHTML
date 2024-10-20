@@ -8,8 +8,8 @@ import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Instances (ParseError (..), ParseResult (..), Parser (..))
 import Parser (atLeast, charTok, inlineSpace, is, isEnd, isNot, isNotWhitespace,
-              positiveInt, lookAhead, manyCharTill, sepBy1, someCharTill, space,
-              spaces, string, unexpectedStringParser, someTill, oneof)
+              positiveInt, lookAhead, manyCharTill, sepBy1, someCharTill,
+              spaces, string, unexpectedStringParser, someTill, oneof, noneof)
 import Data.Maybe (fromMaybe)
 import Data.List (isPrefixOf)
 
@@ -123,8 +123,8 @@ image :: Parser ADT
 image = liftA3
           Image
           (inlineSpace *> is '!' *> isNotWhitespace *> betweenTwo "[" "]")
-          -- Ensure there is a whitespace by including it in the closing tag
-          (betweenTwo "(" " \"")
+          -- Ensure there is a whitespace between the URL and caption
+          (is '(' *> some (noneof "\t\r\f\v ") <* oneof "\t\r\f\v " <* is '"')
           (someCharTill (string "\")"))
 
 
@@ -229,7 +229,7 @@ nestedList n = string (replicate (n + 4) ' ') *> orderedList' (n + 4)
 listItem :: Int -> Parser ADT
 listItem n = string (replicate n ' ')
                 *> positiveInt
-                *> string ". "
+                *> string "." *> oneof "\t\r\f\v "
                 *> (Item <$> freeText')
 
 -- Try parsing a nested list first, if none are found, parse the next list item
@@ -242,7 +242,7 @@ orderedList' n = do
   -- Parse the first list item
   number <- positiveInt
   guard (number == 1) <|> unexpectedStringParser "Number must be 1"
-  headList <- Item <$> (string ". " *> freeText')
+  headList <- Item <$> (string "." *> oneof "\t\r\f\v " *> freeText')
   -- Recursively parse the rest of the list items
   restList <- many (list n)
   return $ OrderedList (headList : restList)
