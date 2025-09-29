@@ -71,14 +71,14 @@ This parses example Markdown files from `examples/input` and saves the HTML outp
 1. Start the Haskell backend:
 
    ```bash
-   cd haskell
+   cd Haskell
    stack run
    ```
 
 2. In another terminal, run the JavaScript frontend:
 
    ```bash
-   cd javascript
+   cd JS
    npm install
    npm run dev
    ```
