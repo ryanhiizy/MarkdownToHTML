@@ -149,7 +149,7 @@ function main() {
                 htmlRender.innerHTML = "";
                 htmlRender.textContent = "";
                 const highlight =
-                    '<link rel="stylesheet" href="https://unpkg.com/@highlightjs/cdn-assets@11.3.1/styles/default.min.css" />';
+                    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />';
                 htmlRender.innerHTML = highlight + value.HTML;
                 const blocks = htmlRender.querySelectorAll("pre code");
                 blocks.forEach((block) =>
