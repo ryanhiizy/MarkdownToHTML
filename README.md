@@ -6,7 +6,7 @@ Markdown to HTML is a parser and transpiler that converts Markdown syntax into v
 
 - **Markdown Parsing**
 
-  - Headings (\`#\` through \`######\`, plus underline styles using \`=\` and \`-\`)
+  - Headings (`#` through `######`, plus underline styles using `=` and `-`)
   - Inline formatting: bold, italic, strikethrough
   - Links
   - Images with alt text and captions
@@ -56,26 +56,23 @@ Generated HTML:
 </ol>
 ```
 
-## Installation and Setup
+## Installation
 
-### Running Tests
+1. Clone the repository:
 
-```bash
-stack test
-```
+   ```bash
+   git clone https://github.com/ryanhiizy/MarkdownToHTML.git
+   cd MarkdownToHTML
+   ```
 
-This parses example Markdown files from `examples/input` and saves the HTML output to `examples/output`.
-
-### Running the Interactive Webpage
-
-1. Start the Haskell backend:
+2. Start the Haskell backend:
 
    ```bash
    cd Haskell
    stack run
    ```
 
-2. In another terminal, run the JavaScript frontend:
+3. Start the JavaScript frontend:
 
    ```bash
    cd JS
@@ -83,7 +80,13 @@ This parses example Markdown files from `examples/input` and saves the HTML outp
    npm run dev
    ```
 
-You can then type Markdown in the left-hand side of the webpage and see the converted HTML on the right-hand side.
+   You can then type Markdown in the left-hand side of the webpage and see the converted HTML on the right-hand side.
+
+4. (Optional) Run tests:
+   ```bash
+   stack test
+   ```
+   This parses example Markdown files from `examples/input` and saves the HTML output to `examples/output`.
 
 ## Authors
 
