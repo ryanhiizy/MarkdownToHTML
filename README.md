@@ -28,7 +28,7 @@ Markdown to HTML is a parser and transpiler that converts Markdown syntax into v
 
 - **Haskell & Scotty** – parses Markdown, converts it into HTML, and serves it via a lightweight web API
 - **TypeScript, RxJS, Vite** – reactive streams for live editing and real-time preview
-- **Stack & NPM** – build tools and package managers for backend and frontend
+- **Stack & npm** – build tools and package managers for backend and frontend
 
 ## Example
 
