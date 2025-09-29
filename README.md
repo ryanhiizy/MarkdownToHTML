@@ -26,9 +26,9 @@ Markdown to HTML is a parser and transpiler that converts Markdown syntax into v
 
 ## Technologies Used
 
-- **Haskell \& Scotty** – backend parsing, HTML rendering, lightweight API
-- **TypeScript, RxJS, Vite** – reactive frontend with live editing and fast builds
-- **Stack \& NPM** – build tools and package management
+- **Haskell & Scotty** – parses Markdown, converts it into HTML, and serves it via a lightweight web API
+- **TypeScript, RxJS, Vite** – reactive streams for live editing and real-time preview
+- **Stack & NPM** – build tools and package managers for backend and frontend
 
 ## Example
 
@@ -85,7 +85,7 @@ This parses example Markdown files from `examples/input` and saves the HTML outp
 
 You can then type Markdown in the left-hand side of the webpage and see the converted HTML on the right-hand side.
 
-## Author
+## Authors
 
 Developed by [@ryanhiizy](https://github.com/ryanhiizy). \
-Skeleton code provided by [@adriankristanto](https://github.com/adriankristanto).
+Scaffold provided by [@adriankristanto](https://github.com/adriankristanto).
